@@ -60,6 +60,7 @@ elseif ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             if (password_verify($password, $user['password'])) {
                 $_SESSION['email'] = $email;
+                $_SESSION['username'] = $user['name']; // Store the user's name in the session
 
                 // Generate OTP
                 $otp = rand(100000, 999999);
@@ -98,7 +99,6 @@ elseif ($_SERVER["REQUEST_METHOD"] === "POST") {
         // OTP verification step
         $entered_otp = $_POST['otp'];
         if (isset($_SESSION['otp']) && $entered_otp == $_SESSION['otp']) {
-            $_SESSION['username'] = $_SESSION['email'];
             unset($_SESSION['otp']);
             header("Location: home.php");
             exit();

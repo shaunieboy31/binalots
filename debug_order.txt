@@ -2,13 +2,6 @@ Array
 (
     [0] => Array
         (
-            [name] => Tapsilog
-            [price] => 100
-            [qty] => 1
-        )
-
-    [1] => Array
-        (
             [name] => Tosilog
             [price] => 90
             [qty] => 2

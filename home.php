@@ -1,9 +1,7 @@
 <?php
-
 session_start();
 // Initialize total amount and order data
 $totalAmount = isset($_SESSION['total']) ? floatval($_SESSION['total']) : 0.00;
-$_SESSION['order'] = isset($_SESSION['order']) ? $_SESSION['order'] : [];
 ?>
 
 <!DOCTYPE html>
@@ -71,7 +69,7 @@ $_SESSION['order'] = isset($_SESSION['order']) ? $_SESSION['order'] : [];
     <div class="col-md-12 text-center mb-3">
       <div class="panel">
         <strong>Receipt No:</strong> <span id="receiptNumber"><?= date('YmdHis') ?></span><br>
-        Operator: <strong id="operatorName"><?= isset($_SESSION['username']) ? htmlspecialchars($_SESSION['username']) : 'Operator' ?></strong>
+                Operator: <strong id="operatorName"><?= isset($_SESSION['username']) ? htmlspecialchars($_SESSION['username']) : 'Operator' ?></strong>
       </div>
     </div>
   </div>
