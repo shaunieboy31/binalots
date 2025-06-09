@@ -21,8 +21,8 @@ if ($filter === 'today') {
     $date_condition = "WHERE YEAR(o.created_at) = YEAR(CURDATE()) AND MONTH(o.created_at) = MONTH(CURDATE())";
 }
 
-// Get filtered orders
-$sql = "SELECT o.order_id, o.receipt_no, o.operator, o.created_at, d.item, d.quantity, d.price
+// Get filtered orders, now including payment_method
+$sql = "SELECT o.order_id, o.receipt_no, o.operator, o.created_at, o.payment_method, d.item, d.quantity, d.price
         FROM orders o
         JOIN order_details d ON o.order_id = d.order_id
         $date_condition
@@ -40,7 +40,8 @@ if ($result && $result->num_rows > 0) {
             $orders[$receipt_no] = [
                 'info' => [
                     'operator' => $row['operator'],
-                    'created_at' => $row['created_at']
+                    'created_at' => $row['created_at'],
+                    'payment_method' => $row['payment_method']
                 ],
                 'items' => []
             ];
@@ -122,7 +123,11 @@ if ($result && $result->num_rows > 0) {
                     <button class="btn btn-danger btn-sm ms-2" onclick="showManagerModal('<?= htmlspecialchars($receipt_no) ?>')" title="Delete Receipt">
                         Delete
                     </button>
-                    <span class="float-end"><strong>Operator:</strong> <?= htmlspecialchars($order['info']['operator']) ?> | <strong>Date:</strong> <?= htmlspecialchars($order['info']['created_at']) ?></span>
+                    <span class="float-end">
+                        <strong>Operator:</strong> <?= htmlspecialchars($order['info']['operator']) ?> |
+                        <strong>Date:</strong> <?= htmlspecialchars($order['info']['created_at']) ?> |
+                        <strong>Method:</strong> <?= htmlspecialchars($order['info']['payment_method']) ?>
+                    </span>
                 </div>
                 <div class="card-body p-0">
                     <table class="table table-dark table-striped mb-0">

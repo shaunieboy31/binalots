@@ -1,39 +1,31 @@
 <?php
-// filepath: c:\xampp\htdocs\Binalots\save_order.php
 $host = 'localhost';
 $user = 'root';
 $pass = '';
 $db = 'binalots';
 
 $conn = new mysqli($host, $user, $pass, $db);
-if ($conn->connect_error) {
-    die('Connection failed: ' . $conn->connect_error);
-}
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 
-session_start();
 $order = json_decode($_POST['order'], true);
+$payment_method = isset($_POST['payment_method']) ? $_POST['payment_method'] : '';
 
 $receipt_no = date('YmdHis');
 $operator = isset($_SESSION['username']) ? $_SESSION['username'] : 'Operator';
+$created_at = date('Y-m-d H:i:s');
 
-if ($order && is_array($order)) {
-    $stmt = $conn->prepare("INSERT INTO orders (receipt_no, operator) VALUES (?, ?)");
-    $stmt->bind_param("ss", $receipt_no, $operator);
-    $stmt->execute();
-    $order_id = $stmt->insert_id;
-    $stmt->close();
+// Insert into orders
+$conn->query("INSERT INTO orders (receipt_no, operator, created_at, payment_method) VALUES ('$receipt_no', '$operator', '$created_at', '$payment_method')");
+$order_id = $conn->insert_id;
 
-    foreach ($order as $item) {
-        $total_price = $item['qty'] * $item['price'];
-        $stmt = $conn->prepare("INSERT INTO order_details (order_id, item, quantity, price) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("isid", $order_id, $item['name'], $item['qty'], $total_price);
-        $stmt->execute();
-        $stmt->close();
-    }
-    echo "Order saved!";
-} else {
-    echo "Invalid order data.";
+// Insert order details
+foreach ($order as $item) {
+    $item_name = $conn->real_escape_string($item['name']);
+    $qty = intval($item['qty']);
+    $price = floatval($item['total']);
+    $conn->query("INSERT INTO order_details (order_id, item, quantity, price) VALUES ($order_id, '$item_name', $qty, $price)");
 }
 
+echo "Order saved!";
 $conn->close();
 ?>

@@ -31,6 +31,31 @@ $conn->close();
     #receiptContent { font-family: monospace; font-size: 15px; color: #222; }
     #receiptContent table { width: 100%; }
     #receiptContent th, #receiptContent td { padding: 2px 4px; }
+    /* Numpad styles */
+    #numpad {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: 220px;
+      margin: 0 auto;
+      justify-content: center;
+    }
+    .numpad-btn {
+      width: 60px;
+      height: 50px;
+      font-size: 1.5rem;
+      background: #eee;
+      color: #222;
+      border: 1px solid #bbb;
+      border-radius: 8px;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      margin-bottom: 5px;
+    }
+    .numpad-btn:active {
+      background: #ccc;
+    }
   </style>
 </head>
 <body>
@@ -120,7 +145,12 @@ $conn->close();
           </div>
           <div class="mb-3">
             <label for="amountTendered" class="form-label">Amount Tendered</label>
-            <input type="number" min="0" step="0.01" class="form-control" id="amountTendered" required>
+            <div id="gcashQR" class="text-center mb-2" style="display:none;">
+                <label class="form-label">Scan to Pay with GCash</label><br>
+                <img src="assets/gcash_qr.png" alt="GCash QR" style="max-width:180px; border:2px solid #2e6733; border-radius:10px;">
+            </div>
+            <input type="text" class="form-control" id="amountTendered" required style="background:#fff; color:#222; cursor:pointer;">
+            <div id="numpad" class="mt-2"></div>
           </div>
           <div class="mb-3">
             <label class="form-label">Receipt Preview</label>
@@ -288,10 +318,11 @@ $conn->close();
 
     // --- Save order to database via AJAX ---
     fetch('save_order.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'order=' + encodeURIComponent(JSON.stringify(order))
-    })
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: 'order=' + encodeURIComponent(JSON.stringify(order)) +
+        '&payment_method=' + encodeURIComponent(document.getElementById('paymentMethod').value)
+})
     .then(res => res.text())
     .then(data => {
       // Optionally show a message: data
@@ -331,6 +362,34 @@ $conn->close();
     win.close();
   }
 
+  // --- Numpad Logic ---
+  function renderNumpad() {
+    const numpad = document.getElementById('numpad');
+    if (!numpad) return;
+    const keys = [
+      '7','8','9',
+      '4','5','6',
+      '1','2','3',
+      '.','0','←'
+    ];
+    let html = '';
+    keys.forEach(key => {
+      html += `<button type="button" class="numpad-btn" onclick="numpadPress('${key}')">${key}</button>`;
+    });
+    numpad.innerHTML = html;
+  }
+  function numpadPress(key) {
+    const input = document.getElementById('amountTendered');
+    if (key === '←') {
+      input.value = input.value.slice(0, -1);
+    } else if (key === '.') {
+      if (!input.value.includes('.')) input.value += '.';
+    } else {
+      input.value += key;
+    }
+  }
+  document.addEventListener('DOMContentLoaded', renderNumpad);
+
   // --- Manager Modal Logic ---
   function managerAccess(url) {
     document.getElementById('managerCodeInput').value = '';
@@ -361,6 +420,11 @@ $conn->close();
   window.onload = function() {
     loadCategory('silog');
   };
+  document.getElementById('paymentMethod').addEventListener('change', function() {
+  const method = this.value;
+  document.getElementById('gcashQR').style.display = (method === 'GCash') ? 'block' : 'none';
+  document.getElementById('amountTendered').value = '';
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
