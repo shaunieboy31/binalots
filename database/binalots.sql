@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 08, 2025 at 04:07 AM
+-- Generation Time: Jun 08, 2025 at 07:48 AM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.0.30
+-- PHP Version: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -87,6 +87,8 @@ CREATE TABLE `users` (
   `name` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
   `password` varchar(255) NOT NULL,
+  `otp` varchar(10) DEFAULT NULL,
+  `is_verified` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -94,9 +96,8 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `name`, `email`, `password`, `created_at`) VALUES
-(12, 'Test', 'test@gmail.com', '$2y$10$me9.hDgwp6xkURWR1brSpuMJneZ04rgTGImijJ4qpcNglPcaWEXOC', '2025-03-04 17:49:32'),
-(13, 'Shaun', 's@gmail.com', '$2y$10$w5Yt2aj/gN/nIViO2oie0.D3BjEY1h08vjlMz0OmBklf20cSapwFC', '2025-06-04 15:56:55');
+INSERT INTO `users` (`id`, `name`, `email`, `password`, `otp`, `is_verified`, `created_at`) VALUES
+(2, 'Cristel', 'vergaracristel0@gmail.com', '$2y$10$jk5MqSbkJnLGWsOi8I9Evu.lWUc.wjmZLMNcZihiL8P5ogjV0UUry', NULL, 1, '2025-06-08 05:00:43');
 
 --
 -- Indexes for dumped tables
@@ -141,7 +142,7 @@ ALTER TABLE `order_details`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

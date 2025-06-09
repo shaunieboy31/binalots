@@ -1,102 +1,179 @@
 <?php
-// Database connection
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "binalots";
+session_start();
+require 'PHPMailer/PHPMailer.php';
+require 'PHPMailer/SMTP.php';
+require 'PHPMailer/Exception.php';
 
-// Create connection
-$conn = new mysqli($servername, $username, $password, $dbname);
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-// Check connection
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+$conn = new mysqli("localhost", "root", "", "binalots");
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+
+$error = $success = "";
+
+// Handle resend OTP request
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['resend'])) {
+    if (isset($_SESSION['email'])) {
+        $otp = rand(100000, 999999);
+        $_SESSION['otp'] = $otp;
+
+        $mail = new PHPMailer(true);
+        try {
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'vergaracristel0@gmail.com'; // Your Gmail
+            $mail->Password = 'wmtq ynhw pshk rmiz'; // App Password
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = 587;
+
+            $mail->setFrom('vergaracristel0@gmail.com', 'Binalots OTP');
+            $mail->addAddress($_SESSION['email']);
+
+            $mail->isHTML(true);
+            $mail->Subject = 'Your OTP Code';
+            $mail->Body    = "Your OTP code is <b>$otp</b>";
+
+            $mail->send();
+            $success = "OTP resent to your email.";
+        } catch (Exception $e) {
+            $error = "Mailer Error: " . $mail->ErrorInfo;
+        }
+    } else {
+        $error = "Session expired. Please login again.";
+        unset($_SESSION['otp']);
+    }
 }
+// Handle login and OTP verification
+elseif ($_SERVER["REQUEST_METHOD"] === "POST") {
+    if (isset($_POST['email'], $_POST['password']) && !isset($_POST['otp'])) {
+        // Login step: verify credentials and send OTP
+        $email = $_POST['email'];
+        $password = $_POST['password'];
 
-// Handle form submission
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $email = $_POST['email'];
-    $password = $_POST['password'];
+        $sql = "SELECT * FROM users WHERE email='$email'";
+        $result = $conn->query($sql);
 
-    $sql = "SELECT * FROM users WHERE email='$email'";
-    $result = $conn->query($sql);
+        if ($result && $result->num_rows > 0) {
+            $user = $result->fetch_assoc();
 
-    if ($result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        if (password_verify($password, $row['password'])) {
-            // Password is correct, set session and redirect to home.php
-            session_start();
-            $_SESSION['username'] = $row['name']; // Store the user's name in session
+            if (password_verify($password, $user['password'])) {
+                $_SESSION['email'] = $email;
+
+                // Generate OTP
+                $otp = rand(100000, 999999);
+                $_SESSION['otp'] = $otp;
+
+                // Send OTP email
+                $mail = new PHPMailer(true);
+                try {
+                    $mail->isSMTP();
+                    $mail->Host = 'smtp.gmail.com';
+                    $mail->SMTPAuth = true;
+                    $mail->Username = 'vergaracristel0@gmail.com';
+                    $mail->Password = 'wmtq ynhw pshk rmiz'; // App Password
+                    $mail->SMTPSecure = 'tls';
+                    $mail->Port = 587;
+
+                    $mail->setFrom('vergaracristel0@gmail.com', 'Binalots OTP');
+                    $mail->addAddress($email);
+
+                    $mail->isHTML(true);
+                    $mail->Subject = 'Your OTP Code';
+                    $mail->Body    = "Your OTP code is <b>$otp</b>";
+
+                    $mail->send();
+                    $success = "OTP sent to your email. Please enter it below.";
+                } catch (Exception $e) {
+                    $error = "Mailer Error: " . $mail->ErrorInfo;
+                }
+            } else {
+                $error = "Invalid password.";
+            }
+        } else {
+            $error = "No account found with that email.";
+        }
+    } elseif (isset($_POST['otp'])) {
+        // OTP verification step
+        $entered_otp = $_POST['otp'];
+        if (isset($_SESSION['otp']) && $entered_otp == $_SESSION['otp']) {
+            $_SESSION['username'] = $_SESSION['email'];
+            unset($_SESSION['otp']);
             header("Location: home.php");
             exit();
         } else {
-            // Password is incorrect
-            $error = "Invalid password.";
+            $error = "Invalid OTP. Please try again.";
         }
-    } else {
-        // Email not found
-        $error = "No account found with that email.";
     }
-
-    $conn->close();
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
     <title>Login Page</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" type="text/css" href="css/first.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" type="text/css" href="css/first.css" />
 </head>
 <body>
-    <div class="login-container">
-        <!-- Left Logo Section -->
-        <div class="logo-section">
-            <img src="img/logo2.png" alt="Logo">
-        </div>
+<div class="login-container">
+    <div class="logo-section">
+        <img src="img/logo2.png" alt="Logo" />
+    </div>
+    <div class="form-section">
+        <h2>LOG IN</h2>
 
-        <!-- Right Form Section -->
-        <div class="form-section">
-            <h2>LOG IN</h2>
-            <?php if (isset($error)): ?>
-                <div class="alert alert-danger" role="alert">
-                    <?php echo $error; ?>
-                </div>
-            <?php endif; ?>
-            <form id="loginForm" method="POST">
-                <div class="mb-3">
-                    <label for="email" class="form-label">Email</label>
-                    <input type="text" id="email" name="email" class="form-control" placeholder="Enter your Email" required>
-                </div>
-                <div class="mb-3">
-                    <label for="password" class="form-label">Password</label>
-                    <input type="password" id="password" name="password" class="form-control" placeholder="Enter your password" required>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    <div class="form-check">
-                        <input type="checkbox" id="showPassword" class="form-check-input">
-                        <label for="showPassword" class="form-check-label">Show Password</label>
-                    </div>
-                    <a href="register.php" class="register" style="color: inherit;">Click to Register!</a>
-                </div>
-                <button type="submit" class="btn btn-login w-100 mt-3">
-                    Log In
-                </button>
+        <?php if (!empty($error)): ?>
+            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+        <?php elseif (!empty($success)): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+
+        <?php if (empty($_SESSION['otp'])): ?>
+        <!-- Login form -->
+        <form method="POST">
+            <div class="mb-3">
+                <label>Email</label>
+                <input name="email" type="email" class="form-control" required />
+            </div>
+            <div class="mb-3">
+                <label>Password</label>
+                <input name="password" id="password" type="password" class="form-control" required />
+            </div>
+            <div class="form-check mb-3">
+                <input type="checkbox" id="showPassword" class="form-check-input" />
+                <label for="showPassword" class="form-check-label">Show Password</label>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Log In</button>
+            <div class="text-center mt-2">
+                <a href="register.php">Click to Register!</a>
+            </div>
+        </form>
+        <?php else: ?>
+        <!-- OTP form -->
+        <form method="POST">
+            <div class="mb-3">
+                <label>Enter OTP</label>
+                <input name="otp" type="text" class="form-control" required />
+            </div>
+            <button type="submit" class="btn btn-success w-100">Verify OTP</button>
+        </form>
+        <div class="text-center mt-2">
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="resend" value="1" />
+                <button type="submit" class="btn btn-link p-0">Resend OTP</button>
             </form>
         </div>
+        <?php endif; ?>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-
-    <script>
-        const showPasswordCheckbox = document.getElementById('showPassword');
-        const passwordInput = document.getElementById('password');
-
-        showPasswordCheckbox.addEventListener('change', () => {
-            passwordInput.type = showPasswordCheckbox.checked ? 'text' : 'password';
-        });
-    </script>
+<script>
+    document.getElementById('showPassword').addEventListener('change', function () {
+        const pwd = document.getElementById('password');
+        pwd.type = this.checked ? 'text' : 'password';
+    });
+</script>
 </body>
 </html>

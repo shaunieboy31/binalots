@@ -1,190 +1,231 @@
 <?php
-// Database connection
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "Binalots";
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-// Create connection
-$conn = new mysqli($servername, $username, $password, $dbname);
+require 'PHPMailer/PHPMailer.php';
+require 'PHPMailer/SMTP.php';
+require 'PHPMailer/Exception.php';
 
-// Check connection
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+$conn = new mysqli("localhost", "root", "", "Binalots");
 
-$success = "";
+session_start();
+
 $error = "";
+$success = "";
+$step = 1; // 1 = register form, 2 = otp verify form, 3 = success message
 
-// Handle form submission
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $name = mysqli_real_escape_string($conn, $_POST['name']);
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
+// Registration form submitted
+if (isset($_POST['register'])) {
+    $name = trim(mysqli_real_escape_string($conn, $_POST['name']));
+    $email = trim(mysqli_real_escape_string($conn, $_POST['email']));
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
 
-    // Email and password validation
     if (!preg_match("/^[a-zA-Z0-9._%+-]+@(yahoo|gmail)\.com$/", $email)) {
         $error = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
     } elseif ($password !== $confirm_password) {
         $error = "Passwords do not match.";
     } else {
-        // Check if email already exists in the database
         $sql = "SELECT * FROM users WHERE email = '$email'";
         $result = $conn->query($sql);
-        
+
         if ($result->num_rows > 0) {
-            // If the email is found, show an error
-            $error = "The email address is already registered. Please use a different email.";
+            $error = "The email address is already registered.";
         } else {
-            // Hash password
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            $otp = rand(100000, 999999);
 
-            // Insert user into database
-            $sql = "INSERT INTO users (name, email, password) VALUES ('$name', '$email', '$hashed_password')";
-
-            if ($conn->query($sql) === TRUE) {
-                $success = "New record created successfully";
-                echo "<script>
-                    setTimeout(function() {
-                        window.location.href = 'login.php';
-                    }, 2000);
-                </script>";
+            $insert = "INSERT INTO users (name, email, password, otp, is_verified) 
+                       VALUES ('$name', '$email', '$hashed_password', '$otp', 0)";
+            if ($conn->query($insert) === TRUE) {
+                // Send OTP email function
+                if (sendOTPEmail($email, $name, $otp)) {
+                    $_SESSION['email'] = $email;
+                    $step = 2; // show OTP verification form
+                } else {
+                    $error = "Failed to send OTP email.";
+                }
             } else {
-                $error = "Error: " . $sql . "<br>" . $conn->error;
+                $error = "Database error: " . $conn->error;
             }
         }
     }
-
-    $conn->close();
 }
+
+// OTP verification submitted
+if (isset($_POST['verify_otp'])) {
+    $otp_input = $_POST['otp'];
+    $email = $_SESSION['email'] ?? '';
+
+    if (empty($email)) {
+        $error = "Session expired. Please register again.";
+        $step = 1;
+    } else {
+        $sql = "SELECT * FROM users WHERE email='$email' AND otp='$otp_input'";
+        $result = $conn->query($sql);
+        if ($result->num_rows > 0) {
+            // Mark verified and clear OTP
+            $conn->query("UPDATE users SET is_verified=1, otp=NULL WHERE email='$email'");
+            $success = "Your account has been verified! Redirecting to login...";
+            session_destroy();
+            echo "<script>
+            setTimeout(function() {
+            window.location.href = 'login.php';
+            }, 3000);
+            </script>";
+            $step = 3; // verification success
+        } else {
+            $error = "Invalid OTP. Please try again.";
+            $step = 2;
+        }
+    }
+}
+
+// Resend OTP submitted
+if (isset($_POST['resend_otp'])) {
+    $email = $_SESSION['email'] ?? '';
+
+    if (empty($email)) {
+        $error = "Session expired. Please register again.";
+        $step = 1;
+    } else {
+        $new_otp = rand(100000, 999999);
+
+        // Update OTP in DB
+        if ($conn->query("UPDATE users SET otp='$new_otp' WHERE email='$email'") === TRUE) {
+            // Get user's name for email
+            $result = $conn->query("SELECT name FROM users WHERE email='$email'");
+            $row = $result->fetch_assoc();
+            $name = $row['name'];
+
+            if (sendOTPEmail($email, $name, $new_otp)) {
+                $success = "A new OTP has been sent to your email.";
+                $step = 2;
+            } else {
+                $error = "Failed to send OTP email.";
+            }
+        } else {
+            $error = "Failed to update OTP in database.";
+        }
+    }
+}
+
+function sendOTPEmail($email, $name, $otp) {
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'vergaracristel0@gmail.com'; // your Gmail
+        $mail->Password = 'wmtq ynhw pshk rmiz'; // your app password
+        $mail->SMTPSecure = 'tls';
+        $mail->Port = 587;
+
+        $mail->setFrom('vergaracristel0@gmail.com', 'Binalots');
+        $mail->addAddress($email);
+        $mail->Subject = 'Your OTP Code';
+        $mail->Body = "Hello $name,\nYour OTP code is: $otp";
+
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+$conn->close();
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="author" content="Your Name">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Register</title>
-    <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
-    <link rel="stylesheet" type="text/css" href="css/reg.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Register with OTP Verification</title>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" />
+<link rel="stylesheet" href="css/reg.css" />
 </head>
 <body>
-    <div class="card-wrapper">
-        <div class="brand">
-            <img src="img/logo2.png" alt="Logo">
-        </div>
-        <div class="card">
-            <div class="card-body">
-                <h4 class="card-title">Register</h4>
-                
-                <!-- Display success or error messages -->
-                <?php if (!empty($success)): ?>
-                    <div class="alert alert-success" role="alert">
-                        <?php echo $success; ?>
-                    </div>
-                <?php elseif (!empty($error)): ?>
-                    <div class="alert alert-danger" role="alert">
-                        <?php echo $error; ?>
-                    </div>
-                <?php endif; ?>
-                
-                <form id="registrationForm" method="POST" class="my-login-validation" novalidate="">
 
+<div class="card-wrapper">
+    <div class="brand">
+        <img src="img/logo2.png" alt="Logo" />
+    </div>
+    <div class="card">
+        <div class="card-body">
+
+            <?php if ($step == 1): ?>
+                <h4 class="card-title">Register</h4>
+                <?php if ($error): ?>
+                    <div class="alert alert-danger"><?php echo $error; ?></div>
+                <?php endif; ?>
+                <form method="POST" novalidate>
                     <div class="form-group">
                         <label for="name">Name</label>
-                        <input id="name" type="text" class="form-control" name="name" required autofocus>
-                        <div class="invalid-feedback">
-                            What's your name?
-                        </div>
+                        <input id="name" type="text" class="form-control" name="name" required autofocus />
                     </div>
-
                     <div class="form-group">
                         <label for="email">E-Mail Address</label>
-                        <input id="email" type="email" class="form-control" name="email" required>
-                        <div class="invalid-feedback">
-                            Please provide a valid email address (e.g., @yahoo.com or @gmail.com).
-                        </div>
+                        <input id="email" type="email" class="form-control" name="email" required />
                     </div>
-
                     <div class="form-group">
                         <label for="password">Password</label>
-                        <input id="password" type="password" class="form-control" name="password" required>
-                        <div class="invalid-feedback">
-                            Password is required
-                        </div>
+                        <input id="password" type="password" class="form-control" name="password" required />
+                        <input type="checkbox" onclick="togglePassword()"> Show Password
                     </div>
-
                     <div class="form-group">
                         <label for="confirm_password">Confirm Password</label>
-                        <input id="confirm_password" type="password" class="form-control" name="confirm_password" required>
-                        <div class="invalid-feedback">
-                            Passwords do not match
-                        </div>
+                        <input id="confirm_password" type="password" class="form-control" name="confirm_password" required />
+                        <input type="checkbox" onclick="toggleConfirm()"> Show Password
                     </div>
-
                     <div class="form-group m-0">
-                        <button type="submit" class="btn btn-primary btn-block">
-                            Register
-                        </button>
-                        <br>
+                        <button type="submit" name="register" class="btn btn-primary btn-block">Register</button>
+                        <br />
                         <center><a href="login.php" class="btn btn-secondary btn-block">Go back to login</a></center>
                     </div>
                 </form>
-            </div>
+
+            <?php elseif ($step == 2): ?>
+                <h4 class="card-title">Verify OTP</h4>
+                <?php if ($error): ?>
+                    <div class="alert alert-danger"><?php echo $error; ?></div>
+                <?php endif; ?>
+                <?php if ($success): ?>
+                    <div class="alert alert-success"><?php echo $success; ?></div>
+                <?php endif; ?>
+                <form method="POST" novalidate>
+                    <div class="form-group">
+                        <label for="otp">Enter OTP sent to your email</label>
+                        <input id="otp" type="text" class="form-control" name="otp" required autofocus />
+                    </div>
+                    <div class="form-group m-0">
+                        <button type="submit" name="verify_otp" class="btn btn-primary btn-block">Verify</button>
+                        <button type="submit" name="resend_otp" class="btn btn-link btn-block">Resend OTP</button>
+                    </div>
+                </form>
+
+            <?php elseif ($step == 3): ?>
+                <div class="alert alert-success">
+                    <?php echo $success; ?>
+                </div>
+            <?php endif; ?>
+
         </div>
     </div>
+</div>
 
-    <!-- JavaScript -->
-    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
-    <script>
-        const emailInput = document.getElementById("email");
-        const passwordInput = document.getElementById("password");
-        const confirmPasswordInput = document.getElementById("confirm_password");
-        const emailPattern = /^[a-zA-Z0-9._%+-]+@(yahoo|gmail)\.com$/;
+<script>
+function togglePassword() {
+    const pass = document.getElementById("password");
+    pass.type = pass.type === "password" ? "text" : "password";
+}
+function toggleConfirm() {
+    const pass = document.getElementById("confirm_password");
+    pass.type = pass.type === "password" ? "text" : "password";
+}
+</script>
 
-        // Real-time email validation
-        emailInput.addEventListener("keyup", function () {
-            if (!emailPattern.test(emailInput.value)) {
-                emailInput.classList.add("is-invalid");
-                emailInput.nextElementSibling.textContent = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
-            } else {
-                emailInput.classList.remove("is-invalid");
-                emailInput.nextElementSibling.textContent = "";
-            }
-        });
-
-        // Real-time password match check
-        confirmPasswordInput.addEventListener("input", function () {
-            if (passwordInput.value !== confirmPasswordInput.value) {
-                confirmPasswordInput.classList.add("is-invalid");
-            } else {
-                confirmPasswordInput.classList.remove("is-invalid");
-            }
-        });
-
-        // Final check on form submission
-        document.getElementById("registrationForm").addEventListener("submit", function (event) {
-            const password = passwordInput.value;
-            const confirmPassword = confirmPasswordInput.value;
-
-            // Email check
-            if (!emailPattern.test(emailInput.value)) {
-                emailInput.classList.add("is-invalid");
-                event.preventDefault();
-            }
-
-            // Password match check
-            if (password !== confirmPassword) {
-                confirmPasswordInput.classList.add("is-invalid");
-                event.preventDefault();
-            } else {
-                confirmPasswordInput.classList.remove("is-invalid");
-            }
-        });
-    </script>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
 </body>
 </html>
