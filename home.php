@@ -208,28 +208,44 @@ $conn->close();
     });
   <?php endforeach; ?>
 
-  function loadCategory(category) {
-    const items = categories[category] || [];
-    let html = '';
-    if (items.length === 0) {
-      html = '<div class="col-12 text-center text-muted">No products in this category.</div>';
-    } else {
-      items.forEach((item, idx) => {
-        html += `
-          <div class="col-md-6 mb-2">
-            <div class="card bg-light text-dark">
-              <div class="card-body p-2">
-                <h6 class="card-title mb-1">${item.name}</h6>
-                <div class="mb-2">₱${item.price.toFixed(2)}</div>
-                <button class="btn btn-success btn-sm" onclick="addToOrder('${category}', ${idx})">Add</button>
-              </div>
+ function loadCategory(category) {
+  const items = categories[category] || [];
+  let html = '';
+  if (items.length === 0) {
+    html = '<div class="col-12 text-center text-muted">No products in this category.</div>';
+  } else {
+    items.forEach((item, idx) => {
+      // Prepare image path (lowercase, no spaces)
+      const imgName = item.name.toLowerCase().replace(/\s+/g, '') + '.jpg';
+      const imgPath = `assets/${imgName}`;
+      // Use image as background, fallback to green if not found (handled by onerror)
+      html += `
+        <div class="col-6 mb-3">
+          <button class="w-100 p-0 border-0 product-btn"
+            style="
+              height:110px;
+              background: #218838;
+              border-radius: 12px;
+              overflow: hidden;
+              position: relative;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            "
+            onclick="addToOrder('${category}', ${idx})">
+            <img src="${imgPath}" alt="${item.name}" 
+              style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;"
+              onerror="this.style.display='none';"
+            >
+            <div style="position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);">
+              <span style="font-size:1.08rem;font-weight:bold;color:#fff;text-shadow:0 1px 3px #000;">${item.name}</span>
+              <span style="font-size:0.98rem;color:#fff;text-shadow:0 1px 3px #000;">₱${item.price.toFixed(2)}</span>
             </div>
-          </div>
-        `;
-      });
-    }
-    bestSellers.innerHTML = html;
+          </button>
+        </div>
+      `;
+    });
   }
+  bestSellers.innerHTML = html;
+}
 
   function addToOrder(category, idx) {
     const item = categories[category][idx];
