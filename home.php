@@ -75,7 +75,7 @@ $conn->close();
         <button class="btn btn-green" onclick="loadCategory('sizzling')">SIZZLING PLATES</button>
         <button class="btn btn-green" onclick="loadCategory('beverages')">BEVERAGES</button>
         <button class="btn btn-green" onclick="loadCategory('addons')">ADD-ONS</button>
-        <a href="products_crud.php" class="btn btn-warning">MANAGE PRODUCTS</a>
+        <button class="btn btn-warning" onclick="managerAccess('products_crud.php')">MANAGE PRODUCTS</button>
         <a href="login.php" class="btn btn-secondary">LOG OUT</a>
       </div>
     </div>
@@ -93,7 +93,7 @@ $conn->close();
       <div class="panel">
         <h5>Total: ₱<span id="total">0.00</span></h5>
         <button class="btn btn-green w-100 mt-3" onclick="showPaymentModal()">Proceed to Payment</button>
-        <button class="btn btn-info w-100 mt-3" onclick="window.location.href='history.php'">History</button>
+        <button class="btn btn-info w-100 mt-3" onclick="managerAccess('history.php')">History</button>
       </div>
     </div>
   </div>
@@ -133,6 +133,29 @@ $conn->close();
             <button type="submit" class="btn btn-success">Confirm Payment</button>
             <button type="button" class="btn btn-secondary" onclick="printReceipt()">Print Receipt</button>
           </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manager Code Modal -->
+<div class="modal fade" id="managerModal" tabindex="-1" aria-labelledby="managerModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-dark">
+      <div class="modal-header">
+        <h5 class="modal-title" id="managerModalLabel">Manager Access</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="managerCodeForm" onsubmit="return checkManagerCode();">
+          <div class="mb-3">
+            <label for="managerCodeInput" class="form-label">Enter Manager Code</label>
+            <input type="password" class="form-control" id="managerCodeInput" required autofocus>
+            <div id="managerCodeError" class="text-danger mt-2" style="display:none;">Incorrect code. Access denied.</div>
+          </div>
+          <input type="hidden" id="managerTargetUrl">
+          <button type="submit" class="btn btn-primary w-100">Submit</button>
         </form>
       </div>
     </div>
@@ -306,6 +329,32 @@ $conn->close();
     win.focus();
     win.print();
     win.close();
+  }
+
+  // --- Manager Modal Logic ---
+  function managerAccess(url) {
+    document.getElementById('managerCodeInput').value = '';
+    document.getElementById('managerCodeError').style.display = 'none';
+    document.getElementById('managerTargetUrl').value = url;
+    var modal = new bootstrap.Modal(document.getElementById('managerModal'));
+    modal.show();
+    setTimeout(() => {
+      document.getElementById('managerCodeInput').focus();
+    }, 500);
+  }
+
+  function checkManagerCode() {
+    const code = document.getElementById('managerCodeInput').value;
+    const url = document.getElementById('managerTargetUrl').value;
+    if (code === "2222") {
+      document.getElementById('managerCodeError').style.display = 'none';
+      var modal = bootstrap.Modal.getInstance(document.getElementById('managerModal'));
+      modal.hide();
+      window.location.href = url;
+    } else {
+      document.getElementById('managerCodeError').style.display = 'block';
+    }
+    return false; // Prevent form submit
   }
 
   // Load default category on page load

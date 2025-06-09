@@ -9,23 +9,10 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Determine filter type
-$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
-$date_condition = "";
-
-if ($filter === 'today') {
-    $date_condition = "WHERE DATE(o.created_at) = CURDATE()";
-} elseif ($filter === 'week') {
-    $date_condition = "WHERE YEARWEEK(o.created_at, 1) = YEARWEEK(CURDATE(), 1)";
-} elseif ($filter === 'month') {
-    $date_condition = "WHERE YEAR(o.created_at) = YEAR(CURDATE()) AND MONTH(o.created_at) = MONTH(CURDATE())";
-}
-
-// Get filtered orders
+// Get archived orders
 $sql = "SELECT o.order_id, o.receipt_no, o.operator, o.created_at, d.item, d.quantity, d.price
-        FROM orders o
-        JOIN order_details d ON o.order_id = d.order_id
-        $date_condition
+        FROM archived_orders o
+        JOIN archived_order_details d ON o.order_id = d.order_id
         ORDER BY o.order_id DESC, d.item ASC";
 $result = $conn->query($sql);
 
@@ -51,7 +38,6 @@ if ($result && $result->num_rows > 0) {
             'price' => $row['price']
         ];
 
-        // Calculate analytics within the loop
         $total_revenue += $row['price'];
         $total_items += $row['quantity'];
     }
@@ -61,65 +47,37 @@ if ($result && $result->num_rows > 0) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Order History</title>
+    <title>Archived Receipts</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body {
-            background-color: #284b25;
-            color: white;
-        }
-        .btn-info {
-            background-color: #4CAF50;
-            border: none;
-        }
-        .btn-info:hover {
-            background-color: #45a049;
-        }
-        .card-header {
-            background-color: #2e6733;
-        }
-        .card {
-            border: none;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .table-dark {
-            background-color: #2e6733;
-        }
-        .table-dark th, .table-dark td {
-            color: white;
-        }
-        .analytics {
-            background-color: #2e6733;
-            padding: 20px;
-            border-radius: 10px;
-        }
+        body { background-color: #284b25; color: white; }
+        .btn-info { background-color: #4CAF50; border: none; }
+        .btn-info:hover { background-color: #45a049; }
+        .card-header { background-color: #2e6733; }
+        .card { border: none; border-radius: 10px; overflow: hidden; }
+        .table-dark { background-color: #2e6733; }
+        .table-dark th, .table-dark td { color: white; }
+        .analytics { background-color: #2e6733; padding: 20px; border-radius: 10px; }
     </style>
 </head>
 <body>
 <div class="container mt-5">
-    <h2 class="mb-4 text-center">Order History</h2>
+    <h2 class="mb-4 text-center">Archived Receipts</h2>
     <div class="text-center mb-4">
-        <a href="home.php" class="btn btn-secondary">Back to POS</a>
-    </div>
-    <div class="text-center mb-4">
-        <button class="btn btn-info" onclick="window.location.href='history.php?filter=today'">Today</button>
-        <button class="btn btn-info" onclick="window.location.href='history.php?filter=week'">This Week</button>
-        <button class="btn btn-info" onclick="window.location.href='history.php?filter=month'">This Month</button>
-        <button class="btn btn-info" onclick="window.location.href='history.php'">All</button>
-        <button class="btn btn-secondary" onclick="window.location.href='archive.php'">View Archive</button>
+        <a href="history.php" class="btn btn-secondary">Back to History</a>
+        <button class="btn btn-danger ms-2" onclick="showManagerModal('', true)">Delete All</button>
     </div>
     <div class="analytics mb-4">
         <h4>Analytics</h4>
-        <p><strong>Total Revenue:</strong> ₱<?= number_format($total_revenue, 2) ?></p>
-        <p><strong>Total Items Sold:</strong> <?= $total_items ?></p>
+        <p><strong>Total Archived Revenue:</strong> ₱<?= number_format($total_revenue, 2) ?></p>
+        <p><strong>Total Archived Items Sold:</strong> <?= $total_items ?></p>
     </div>
     <?php if (!empty($orders)): ?>
         <?php foreach ($orders as $receipt_no => $order): ?>
             <div class="card mb-4">
                 <div class="card-header text-white">
                     <strong>Receipt No:</strong> <?= htmlspecialchars($receipt_no) ?>
-                    <button class="btn btn-danger btn-sm ms-2" onclick="showManagerModal('<?= htmlspecialchars($receipt_no) ?>')" title="Delete Receipt">
+                    <button class="btn btn-danger btn-sm ms-2" onclick="showManagerModal('<?= htmlspecialchars($receipt_no) ?>', false)" title="Delete Archived Receipt">
                         Delete
                     </button>
                     <span class="float-end"><strong>Operator:</strong> <?= htmlspecialchars($order['info']['operator']) ?> | <strong>Date:</strong> <?= htmlspecialchars($order['info']['created_at']) ?></span>
@@ -153,7 +111,7 @@ if ($result && $result->num_rows > 0) {
             </div>
         <?php endforeach; ?>
     <?php else: ?>
-        <div class="alert alert-info text-center">No orders found.</div>
+        <div class="alert alert-info text-center">No archived receipts found.</div>
     <?php endif; ?>
 </div>
 
@@ -173,6 +131,7 @@ if ($result && $result->num_rows > 0) {
             <div id="managerCodeError" class="text-danger mt-2" style="display:none;">Incorrect code. Access denied.</div>
           </div>
           <input type="hidden" id="deleteReceiptNo">
+          <input type="hidden" id="deleteAllFlag">
           <button type="submit" class="btn btn-primary w-100">Submit</button>
         </form>
       </div>
@@ -182,10 +141,11 @@ if ($result && $result->num_rows > 0) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function showManagerModal(receiptNo) {
+function showManagerModal(receiptNo, deleteAll = false) {
     document.getElementById('managerCodeInput').value = '';
     document.getElementById('managerCodeError').style.display = 'none';
-    document.getElementById('deleteReceiptNo').value = receiptNo;
+    document.getElementById('deleteReceiptNo').value = receiptNo || '';
+    document.getElementById('deleteAllFlag').value = deleteAll ? '1' : '';
     var modal = new bootstrap.Modal(document.getElementById('managerModal'));
     modal.show();
     setTimeout(() => {
@@ -196,14 +156,28 @@ function showManagerModal(receiptNo) {
 function checkManagerCode() {
     const code = document.getElementById('managerCodeInput').value;
     const receiptNo = document.getElementById('deleteReceiptNo').value;
+    const deleteAll = document.getElementById('deleteAllFlag').value === '1';
     if (code === "2222") {
         document.getElementById('managerCodeError').style.display = 'none';
         var modal = bootstrap.Modal.getInstance(document.getElementById('managerModal'));
         modal.hide();
         // Proceed to delete
-        if(receiptNo) {
-            if(confirm("Are you sure you want to delete this receipt?")) {
-                fetch('delete_receipt.php', {
+        if(deleteAll) {
+            if(confirm("Are you sure you want to permanently delete ALL archived receipts?")) {
+                fetch('delete_archived_receipt.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'delete_all=1'
+                })
+                .then(res => res.text())
+                .then(data => {
+                    alert(data);
+                    location.reload();
+                });
+            }
+        } else if(receiptNo) {
+            if(confirm("Are you sure you want to permanently delete this archived receipt?")) {
+                fetch('delete_archived_receipt.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: 'receipt_no=' + encodeURIComponent(receiptNo)
