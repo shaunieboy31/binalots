@@ -1,4 +1,5 @@
 <?php
+// filepath: c:\xampp\htdocs\Binalots\save_order.php
 $host = 'localhost';
 $user = 'root';
 $pass = '';
@@ -11,9 +12,6 @@ if ($conn->connect_error) {
 
 session_start();
 $order = json_decode($_POST['order'], true);
-
-// Debug: log what is received
-file_put_contents('debug_order.txt', print_r($order, true));
 
 $receipt_no = date('YmdHis');
 $operator = isset($_SESSION['username']) ? $_SESSION['username'] : 'Operator';
