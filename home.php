@@ -4,11 +4,22 @@ $totalAmount = isset($_SESSION['total']) ? floatval($_SESSION['total']) : 0.00;
 
 // Fetch products from DB
 $products = [];
+$categories = [];
+$category_display = [
+    'silog' => 'SILOG MEALS',
+    'family' => 'FAMILY MEALS',
+    'sizzling' => 'SIZZLING PLATES',
+    'beverages' => 'BEVERAGES',
+    'addons' => 'ADD-ONS',
+    'special' => 'SPECIAL DEALS'
+];
 $conn = new mysqli("localhost", "root", "", "binalots");
 if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
 $res = $conn->query("SELECT * FROM products");
 while($row = $res->fetch_assoc()) {
     $products[] = $row;
+    $cat = strtolower($row['category']);
+    if (!in_array($cat, $categories)) $categories[] = $cat;
 }
 $conn->close();
 ?>
@@ -94,11 +105,11 @@ $conn->close();
     <!-- Category Buttons -->
     <div class="col-md-3">
       <div class="d-grid gap-2">
-        <button class="btn btn-green" onclick="loadCategory('silog')">SILOG MEALS</button>
-        <button class="btn btn-green" onclick="loadCategory('family')">FAMILY MEALS</button>
-        <button class="btn btn-green" onclick="loadCategory('sizzling')">SIZZLING PLATES</button>
-        <button class="btn btn-green" onclick="loadCategory('beverages')">BEVERAGES</button>
-        <button class="btn btn-green" onclick="loadCategory('addons')">ADD-ONS</button>
+        <?php foreach ($categories as $cat): ?>
+          <button class="btn btn-green" onclick="loadCategory('<?= $cat ?>')">
+            <?= isset($category_display[$cat]) ? $category_display[$cat] : strtoupper($cat) ?>
+          </button>
+        <?php endforeach; ?>
         <button class="btn btn-warning" onclick="managerAccess('products_crud.php')">MANAGE PRODUCTS</button>
         <a href="login.php" class="btn btn-secondary">LOG OUT</a>
       </div>
@@ -201,8 +212,8 @@ $conn->close();
   // Dynamically generated categories from PHP
   const categories = {};
   <?php foreach($products as $prod): ?>
-    if (!categories['<?= $prod['category'] ?>']) categories['<?= $prod['category'] ?>'] = [];
-    categories['<?= $prod['category'] ?>'].push({
+    if (!categories['<?= strtolower($prod['category']) ?>']) categories['<?= strtolower($prod['category']) ?>'] = [];
+    categories['<?= strtolower($prod['category']) ?>'].push({
       name: "<?= addslashes($prod['name']) ?>",
       price: <?= floatval($prod['price']) ?>
     });
@@ -475,7 +486,9 @@ $conn->close();
 
   // Load default category on page load
   window.onload = function() {
-    loadCategory('silog');
+    // Load first available category
+    const firstCat = Object.keys(categories)[0];
+    if (firstCat) loadCategory(firstCat);
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
