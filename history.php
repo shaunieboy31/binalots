@@ -35,43 +35,6 @@ function autoArchiveOldOrders($conn) {
 }
 autoArchiveOldOrders($conn);
 
-// Date range and receipt search filter
-$filter_sql = [];
-if (!empty($_GET['from']) && !empty($_GET['to'])) {
-    $from = $_GET['from'];
-    $to = $_GET['to'];
-    $filter_sql[] = "DATE(o.created_at) BETWEEN '$from' AND '$to'";
-} elseif (!empty($_GET['from'])) {
-    $from = $_GET['from'];
-    $filter_sql[] = "DATE(o.created_at) >= '$from'";
-} elseif (!empty($_GET['to'])) {
-    $to = $_GET['to'];
-    $filter_sql[] = "DATE(o.created_at) <= '$to'";
-}
-if (!empty($_GET['search_receipt'])) {
-    $search = $conn->real_escape_string($_GET['search_receipt']);
-    $filter_sql[] = "o.receipt_no LIKE '%$search%'";
-}
-$where = '';
-if ($filter_sql) {
-    $where = 'WHERE ' . implode(' AND ', $filter_sql);
-}
-
-// Get all receipts
-$sql = "SELECT o.receipt_no, o.operator, o.created_at, o.payment_method
-        FROM orders o
-        $where
-        GROUP BY o.receipt_no
-        ORDER BY o.order_id DESC";
-$result = $conn->query($sql);
-
-$receipts = [];
-if ($result && $result->num_rows > 0) {
-    while($row = $result->fetch_assoc()) {
-        $receipts[] = $row;
-    }
-}
-
 // For dashboard
 $best_sellers = [];
 $bsql = "SELECT d.item, SUM(d.quantity) as total_sold
@@ -127,13 +90,13 @@ while($row = $sresult->fetch_assoc()) {
         <label for="from" class="col-form-label">From:</label>
       </div>
       <div class="col-auto">
-        <input type="date" class="form-control" id="from" name="from" value="<?= isset($_GET['from']) ? htmlspecialchars($_GET['from']) : '' ?>">
+        <input type="date" class="form-control" id="from" name="from">
       </div>
       <div class="col-auto">
         <label for="to" class="col-form-label">To:</label>
       </div>
       <div class="col-auto">
-        <input type="date" class="form-control" id="to" name="to" value="<?= isset($_GET['to']) ? htmlspecialchars($_GET['to']) : '' ?>">
+        <input type="date" class="form-control" id="to" name="to">
       </div>
     </form>
     <!-- Dashboard -->
@@ -159,7 +122,7 @@ while($row = $sresult->fetch_assoc()) {
     <!-- Search Receipt No (auto search, no reset/search button) -->
     <form class="row g-2 mb-3" id="searchForm" onsubmit="return false;">
       <div class="col-auto">
-        <input type="text" class="form-control" name="search_receipt" id="search_receipt" placeholder="Search Receipt No" value="<?= isset($_GET['search_receipt']) ? htmlspecialchars($_GET['search_receipt']) : '' ?>">
+        <input type="text" class="form-control" name="search_receipt" id="search_receipt" placeholder="Search Receipt No">
       </div>
     </form>
     <div class="card mb-4">
@@ -178,25 +141,7 @@ while($row = $sresult->fetch_assoc()) {
                     </tr>
                 </thead>
                 <tbody id="receipts-table-body">
-                <?php if (!empty($receipts)): ?>
-                    <?php foreach ($receipts as $r): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($r['receipt_no']) ?></td>
-                            <td><?= htmlspecialchars($r['operator']) ?></td>
-                            <td><?= htmlspecialchars($r['created_at']) ?></td>
-                            <td><?= htmlspecialchars($r['payment_method']) ?></td>
-                            <td>
-                                <button class="btn btn-info btn-sm" onclick="viewReceipt('<?= htmlspecialchars($r['receipt_no']) ?>')">View</button>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="5" class="text-center text-warning">
-                            No matching receipts found.
-                        </td>
-                    </tr>
-                <?php endif; ?>
+                    <!-- Table rows will be loaded here by AJAX -->
                 </tbody>
             </table>
         </div>
@@ -220,6 +165,8 @@ while($row = $sresult->fetch_assoc()) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+let currentPage = 1;
+
 function viewReceipt(receiptNo) {
     fetch('view_receipt.php?receipt_no=' + encodeURIComponent(receiptNo))
         .then(res => res.text())
@@ -230,12 +177,13 @@ function viewReceipt(receiptNo) {
         });
 }
 
-// AJAX table update
-function updateTable() {
+// AJAX table update with pagination
+function updateTable(page = 1) {
+    currentPage = page;
     const from = document.getElementById('from').value;
     const to = document.getElementById('to').value;
     const search = document.getElementById('search_receipt').value;
-    const params = new URLSearchParams({from, to, search_receipt: search});
+    const params = new URLSearchParams({from, to, search_receipt: search, page});
     fetch('history_table.php?' + params.toString())
         .then(res => res.text())
         .then(html => {
@@ -243,23 +191,30 @@ function updateTable() {
         });
 }
 
+function goToPage(page) {
+    updateTable(page);
+}
+
 document.getElementById('search_receipt').addEventListener('input', function() {
     document.getElementById('from').value = '';
     document.getElementById('to').value = '';
-    updateTable();
+    updateTable(1);
 });
 
 document.getElementById('from').addEventListener('change', function() {
     document.getElementById('search_receipt').value = '';
-    updateTable();
+    updateTable(1);
 });
 document.getElementById('to').addEventListener('change', function() {
     document.getElementById('search_receipt').value = '';
-    updateTable();
+    updateTable(1);
 });
 
-// Chart.js Dashboard
+// Initial load
 document.addEventListener('DOMContentLoaded', function() {
+    updateTable(1);
+
+    // Chart.js Dashboard
     const salesLabels = <?= json_encode(array_column($sales_data, 'sale_date')) ?>;
     const salesTotals = <?= json_encode(array_map('floatval', array_column($sales_data, 'total_sales'))) ?>;
     const ctx = document.getElementById('salesChart').getContext('2d');
