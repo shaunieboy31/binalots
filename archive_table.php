@@ -5,6 +5,10 @@ $password = "";
 $dbname = "binalots";
 $conn = new mysqli($servername, $username, $password, $dbname);
 
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$per_page = 3;
+$offset = ($page - 1) * $per_page;
+
 $filter_sql = [];
 if (!empty($_GET['from']) && !empty($_GET['to'])) {
     $from = $_GET['from'];
@@ -26,11 +30,17 @@ if ($filter_sql) {
     $where = 'WHERE ' . implode(' AND ', $filter_sql);
 }
 
+$count_sql = "SELECT COUNT(DISTINCT o.receipt_no) as total FROM archived_orders o $where";
+$count_result = $conn->query($count_sql);
+$total = $count_result ? $count_result->fetch_assoc()['total'] : 0;
+$total_pages = ceil($total / $per_page);
+
 $sql = "SELECT o.receipt_no, o.operator, o.created_at
         FROM archived_orders o
         $where
         GROUP BY o.receipt_no
-        ORDER BY o.order_id DESC";
+        ORDER BY o.order_id DESC
+        LIMIT $per_page OFFSET $offset";
 $result = $conn->query($sql);
 
 $receipts = [];
@@ -55,5 +65,13 @@ if (!empty($receipts)) {
 } else {
     echo "<tr><td colspan='4' class='text-center'>No archived receipts found.</td></tr>";
 }
+
+echo "<tr><td colspan='4' class='text-center'>";
+for ($i = 1; $i <= $total_pages; $i++) {
+    $active = $i == $page ? "btn-primary" : "btn-outline-primary";
+    echo "<button class='btn $active btn-sm mx-1' onclick='goToPage($i)'>$i</button>";
+}
+echo "</td></tr>";
+
 $conn->close();
 ?>
