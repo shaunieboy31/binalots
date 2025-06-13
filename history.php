@@ -1,4 +1,6 @@
 <?php
+session_start(); // Start session to access user info
+
 $servername = "localhost";
 $username = "root";
 $password = "";
@@ -124,7 +126,7 @@ if ($result && $result->num_rows > 0) {
                         Delete
                     </button>
                     <span class="float-end">
-                        <strong>Operator:</strong> <?= htmlspecialchars($order['info']['operator']) ?> |
+                        <strong>Operator:</strong> <?= htmlspecialchars($order['info']['operator'] ?? 'Unknown') ?> |
                         <strong>Date:</strong> <?= htmlspecialchars($order['info']['created_at']) ?> |
                         <strong>Method:</strong> <?= htmlspecialchars($order['info']['payment_method']) ?>
                     </span>

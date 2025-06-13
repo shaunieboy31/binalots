@@ -31,7 +31,6 @@ $conn->close();
     #receiptContent { font-family: monospace; font-size: 15px; color: #222; }
     #receiptContent table { width: 100%; }
     #receiptContent th, #receiptContent td { padding: 2px 4px; }
-    /* Numpad styles */
     #numpad {
       display: flex;
       flex-wrap: wrap;
@@ -150,6 +149,7 @@ $conn->close();
                 <img src="assets/gcash_qr.png" alt="GCash QR" style="max-width:180px; border:2px solid #2e6733; border-radius:10px;">
             </div>
             <input type="text" class="form-control" id="amountTendered" required style="background:#fff; color:#222; cursor:pointer;">
+            <div id="amountTenderedError" class="text-danger"></div>
             <div id="numpad" class="mt-2"></div>
           </div>
           <div class="mb-3">
@@ -160,7 +160,7 @@ $conn->close();
             <span id="changeDue" class="fw-bold"></span>
           </div>
           <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-success">Confirm Payment</button>
+            <button type="submit" class="btn btn-success" id="confirmPaymentBtn" disabled>Confirm Payment</button>
             <button type="button" class="btn btn-secondary" onclick="printReceipt()">Print Receipt</button>
           </div>
         </form>
@@ -208,44 +208,43 @@ $conn->close();
     });
   <?php endforeach; ?>
 
- function loadCategory(category) {
-  const items = categories[category] || [];
-  let html = '';
-  if (items.length === 0) {
-    html = '<div class="col-12 text-center text-muted">No products in this category.</div>';
-  } else {
-    items.forEach((item, idx) => {
-      // Prepare image path (lowercase, no spaces)
-      const imgName = item.name.toLowerCase().replace(/\s+/g, '') + '.jpg';
-      const imgPath = `assets/${imgName}`;
-      // Use image as background, fallback to green if not found (handled by onerror)
-      html += `
-        <div class="col-6 mb-3">
-          <button class="w-100 p-0 border-0 product-btn"
-            style="
-              height:110px;
-              background: #218838;
-              border-radius: 12px;
-              overflow: hidden;
-              position: relative;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            "
-            onclick="addToOrder('${category}', ${idx})">
-            <img src="${imgPath}" alt="${item.name}" 
-              style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;"
-              onerror="this.style.display='none';"
-            >
-            <div style="position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);">
-              <span style="font-size:1.08rem;font-weight:bold;color:#fff;text-shadow:0 1px 3px #000;">${item.name}</span>
-              <span style="font-size:0.98rem;color:#fff;text-shadow:0 1px 3px #000;">₱${item.price.toFixed(2)}</span>
-            </div>
-          </button>
-        </div>
-      `;
-    });
+  function loadCategory(category) {
+    const items = categories[category] || [];
+    let html = '';
+    if (items.length === 0) {
+      html = '<div class="col-12 text-center text-muted">No products in this category.</div>';
+    } else {
+      items.forEach((item, idx) => {
+        // Prepare image path (lowercase, no spaces)
+        const imgName = item.name.toLowerCase().replace(/\s+/g, '') + '.jpg';
+        const imgPath = `assets/${imgName}`;
+        html += `
+          <div class="col-6 mb-3">
+            <button class="w-100 p-0 border-0 product-btn"
+              style="
+                height:110px;
+                background: #218838;
+                border-radius: 12px;
+                overflow: hidden;
+                position: relative;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+              "
+              onclick="addToOrder('${category}', ${idx})">
+              <img src="${imgPath}" alt="${item.name}" 
+                style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;"
+                onerror="this.style.display='none';"
+              >
+              <div style="position:relative;z-index:2;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);">
+                <span style="font-size:1.08rem;font-weight:bold;color:#fff;text-shadow:0 1px 3px #000;">${item.name}</span>
+                <span style="font-size:0.98rem;color:#fff;text-shadow:0 1px 3px #000;">₱${item.price.toFixed(2)}</span>
+              </div>
+            </button>
+          </div>
+        `;
+      });
+    }
+    bestSellers.innerHTML = html;
   }
-  bestSellers.innerHTML = html;
-}
 
   function addToOrder(category, idx) {
     const item = categories[category][idx];
@@ -314,8 +313,10 @@ $conn->close();
     receipt += `<div class="mt-2"><strong>Total:</strong> ₱${totalElement.textContent}</div></div>`;
     document.getElementById('receiptContent').innerHTML = receipt;
     document.getElementById('amountTendered').value = '';
+    document.getElementById('amountTenderedError').textContent = '';
     document.getElementById('changeDue').textContent = '';
     document.getElementById('paymentMethod').value = '';
+    document.getElementById('confirmPaymentBtn').disabled = true;
     // Show modal
     var modal = new bootstrap.Modal(document.getElementById('paymentModal'));
     modal.show();
@@ -325,8 +326,8 @@ $conn->close();
     const amount = parseFloat(document.getElementById('amountTendered').value);
     const total = parseFloat(totalElement.textContent);
     const method = document.getElementById('paymentMethod').value;
-    if (isNaN(amount) || amount < total) {
-      document.getElementById('changeDue').textContent = "Insufficient amount!";
+    if (isNaN(amount) || amount < total || amount < 0) {
+      document.getElementById('changeDue').textContent = "Insufficient or invalid amount!";
       return false;
     }
     const change = amount - total;
@@ -334,11 +335,11 @@ $conn->close();
 
     // --- Save order to database via AJAX ---
     fetch('save_order.php', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  body: 'order=' + encodeURIComponent(JSON.stringify(order)) +
-        '&payment_method=' + encodeURIComponent(document.getElementById('paymentMethod').value)
-})
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'order=' + encodeURIComponent(JSON.stringify(order)) +
+            '&payment_method=' + encodeURIComponent(document.getElementById('paymentMethod').value)
+    })
     .then(res => res.text())
     .then(data => {
       // Optionally show a message: data
@@ -403,6 +404,7 @@ $conn->close();
     } else {
       input.value += key;
     }
+    validatePaymentAmount();
   }
   document.addEventListener('DOMContentLoaded', renderNumpad);
 
@@ -432,15 +434,49 @@ $conn->close();
     return false; // Prevent form submit
   }
 
+  // --- Payment Amount Validation ---
+  function validatePaymentAmount() {
+    const amountInput = document.getElementById('amountTendered');
+    const amountStr = amountInput.value.trim();
+    const amount = parseFloat(amountStr);
+    const total = parseFloat(document.getElementById('total').textContent);
+    const method = document.getElementById('paymentMethod').value;
+    const btn = document.getElementById('confirmPaymentBtn');
+    const errorDiv = document.getElementById('amountTenderedError');
+    let valid = true;
+    let errorMsg = "";
+
+    if (!method) {
+      valid = false;
+      errorMsg = "";
+    } else if (!amountStr || isNaN(amount)) {
+      valid = false;
+      errorMsg = "Please enter a valid amount.";
+    } else if (amount < 0) {
+      valid = false;
+      errorMsg = "Negative amount is not allowed.";
+      amountInput.value = "";
+    } else if (amount < total) {
+      valid = false;
+      errorMsg = "Insufficient amount!";
+    }
+
+    btn.disabled = !valid;
+    errorDiv.textContent = errorMsg;
+  }
+
+  document.getElementById('paymentMethod').addEventListener('change', function() {
+    const method = this.value;
+    document.getElementById('gcashQR').style.display = (method === 'GCash') ? 'block' : 'none';
+    document.getElementById('amountTendered').value = '';
+    validatePaymentAmount();
+  });
+  document.getElementById('amountTendered').addEventListener('input', validatePaymentAmount);
+
   // Load default category on page load
   window.onload = function() {
     loadCategory('silog');
   };
-  document.getElementById('paymentMethod').addEventListener('change', function() {
-  const method = this.value;
-  document.getElementById('gcashQR').style.display = (method === 'GCash') ? 'block' : 'none';
-  document.getElementById('amountTendered').value = '';
-});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

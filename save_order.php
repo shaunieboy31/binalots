@@ -1,4 +1,6 @@
 <?php
+session_start(); // Make sure to start the session to access the logged-in user
+
 $host = 'localhost';
 $user = 'root';
 $pass = '';
@@ -15,16 +17,22 @@ $operator = isset($_SESSION['username']) ? $_SESSION['username'] : 'Operator';
 $created_at = date('Y-m-d H:i:s');
 
 // Insert into orders
-$conn->query("INSERT INTO orders (receipt_no, operator, created_at, payment_method) VALUES ('$receipt_no', '$operator', '$created_at', '$payment_method')");
-$order_id = $conn->insert_id;
+$stmt = $conn->prepare("INSERT INTO orders (receipt_no, operator, created_at, payment_method) VALUES (?, ?, ?, ?)");
+$stmt->bind_param("ssss", $receipt_no, $operator, $created_at, $payment_method);
+$stmt->execute();
+$order_id = $stmt->insert_id;
+$stmt->close();
 
 // Insert order details
+$stmt = $conn->prepare("INSERT INTO order_details (order_id, item, quantity, price) VALUES (?, ?, ?, ?)");
 foreach ($order as $item) {
-    $item_name = $conn->real_escape_string($item['name']);
+    $item_name = $item['name'];
     $qty = intval($item['qty']);
     $price = floatval($item['total']);
-    $conn->query("INSERT INTO order_details (order_id, item, quantity, price) VALUES ($order_id, '$item_name', $qty, $price)");
+    $stmt->bind_param("isid", $order_id, $item_name, $qty, $price);
+    $stmt->execute();
 }
+$stmt->close();
 
 echo "Order saved!";
 $conn->close();

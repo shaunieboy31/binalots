@@ -22,7 +22,7 @@ if (isset($_POST['register'])) {
     $confirm_password = $_POST['confirm_password'];
 
     if (!preg_match("/^[a-zA-Z0-9._%+-]+@(yahoo|gmail)\.com$/", $email)) {
-        $error = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
+        $error = "Please fill up the folowing fields correctly.";
     } elseif ($password !== $confirm_password) {
         $error = "Passwords do not match.";
     } else {
@@ -163,20 +163,24 @@ $conn->close();
                     <div class="form-group">
                         <label for="name">Name</label>
                         <input id="name" type="text" class="form-control" name="name" required autofocus />
+                        <div id="nameError" class="text-danger" style="display:none;"></div>
                     </div>
                     <div class="form-group">
                         <label for="email">E-Mail Address</label>
                         <input id="email" type="email" class="form-control" name="email" required />
+                        <div id="emailError" class="text-danger" style="display:none;"></div>
                     </div>
                     <div class="form-group">
                         <label for="password">Password</label>
                         <input id="password" type="password" class="form-control" name="password" required />
                         <input type="checkbox" onclick="togglePassword()"> Show Password
+                        <div id="passwordError" class="text-danger" style="display:none;"></div>
                     </div>
                     <div class="form-group">
                         <label for="confirm_password">Confirm Password</label>
                         <input id="confirm_password" type="password" class="form-control" name="confirm_password" required />
                         <input type="checkbox" onclick="toggleConfirm()"> Show Password
+                        <div id="confirmError" class="text-danger" style="display:none;"></div>
                     </div>
                     <div class="form-group m-0">
                         <button type="submit" name="register" class="btn btn-primary btn-block">Register</button>
@@ -223,6 +227,111 @@ function toggleConfirm() {
     const pass = document.getElementById("confirm_password");
     pass.type = pass.type === "password" ? "text" : "password";
 }
+
+// Real-time validation for all fields
+function validateEmail(email) {
+    return /^[a-zA-Z0-9._%+-]+@(yahoo|gmail)\.com$/.test(email);
+}
+function validateName(name) {
+    return name.trim().length > 0;
+}
+function validatePassword(password) {
+    return password.length >= 6;
+}
+function validateConfirm(password, confirm) {
+    return password === confirm && confirm.length > 0;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const nameInput = document.getElementById('name');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const confirmInput = document.getElementById('confirm_password');
+
+    const nameError = document.getElementById('nameError');
+    const emailError = document.getElementById('emailError');
+    const passwordError = document.getElementById('passwordError');
+    const confirmError = document.getElementById('confirmError');
+
+    nameInput.addEventListener('input', function() {
+        if (!validateName(this.value)) {
+            nameError.textContent = "Name is required.";
+            nameError.style.display = "block";
+        } else {
+            nameError.textContent = "";
+            nameError.style.display = "none";
+        }
+    });
+
+    emailInput.addEventListener('input', function() {
+        if (this.value.length > 0 && !validateEmail(this.value)) {
+            emailError.textContent = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
+            emailError.style.display = "block";
+        } else {
+            emailError.textContent = "";
+            emailError.style.display = "none";
+        }
+    });
+
+    passwordInput.addEventListener('input', function() {
+        if (!validatePassword(this.value)) {
+            passwordError.textContent = "Password must be at least 6 characters.";
+            passwordError.style.display = "block";
+        } else {
+            passwordError.textContent = "";
+            passwordError.style.display = "none";
+        }
+        // Also check confirm password
+        if (confirmInput.value.length > 0) {
+            if (!validateConfirm(this.value, confirmInput.value)) {
+                confirmError.textContent = "Passwords do not match.";
+                confirmError.style.display = "block";
+            } else {
+                confirmError.textContent = "";
+                confirmError.style.display = "none";
+            }
+        }
+    });
+
+    confirmInput.addEventListener('input', function() {
+        if (!validateConfirm(passwordInput.value, this.value)) {
+            confirmError.textContent = "Passwords do not match.";
+            confirmError.style.display = "block";
+        } else {
+            confirmError.textContent = "";
+            confirmError.style.display = "none";
+        }
+    });
+
+    // Show errors on submit if any field is invalid
+    document.querySelector('form[method="POST"]').addEventListener('submit', function(e) {
+        let hasError = false;
+
+        if (!validateName(nameInput.value)) {
+            nameError.textContent = "Name is required.";
+            nameError.style.display = "block";
+            hasError = true;
+        }
+        if (!validateEmail(emailInput.value)) {
+            emailError.textContent = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
+            emailError.style.display = "block";
+            hasError = true;
+        }
+        if (!validatePassword(passwordInput.value)) {
+            passwordError.textContent = "Password must be at least 6 characters.";
+            passwordError.style.display = "block";
+            hasError = true;
+        }
+        if (!validateConfirm(passwordInput.value, confirmInput.value)) {
+            confirmError.textContent = "Passwords do not match.";
+            confirmError.style.display = "block";
+            hasError = true;
+        }
+        if (hasError) {
+            e.preventDefault();
+        }
+    });
+});
 </script>
 
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>

@@ -132,14 +132,16 @@ elseif ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         <?php if (empty($_SESSION['otp'])): ?>
         <!-- Login form -->
-        <form method="POST">
+        <form method="POST" novalidate>
             <div class="mb-3">
                 <label>Email</label>
-                <input name="email" type="email" class="form-control" required />
+                <input name="email" id="loginEmail" type="email" class="form-control" required />
+                <div id="loginEmailError" class="text-danger" style="display:none;"></div>
             </div>
             <div class="mb-3">
                 <label>Password</label>
                 <input name="password" id="password" type="password" class="form-control" required />
+                <div id="loginPasswordError" class="text-danger" style="display:none;"></div>
             </div>
             <div class="form-check mb-3">
                 <input type="checkbox" id="showPassword" class="form-check-input" />
@@ -170,10 +172,68 @@ elseif ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 
 <script>
-    document.getElementById('showPassword').addEventListener('change', function () {
-        const pwd = document.getElementById('password');
-        pwd.type = this.checked ? 'text' : 'password';
-    });
+document.getElementById('showPassword').addEventListener('change', function () {
+    const pwd = document.getElementById('password');
+    pwd.type = this.checked ? 'text' : 'password';
+});
+
+// Real-time validation
+function validateLoginEmail(email) {
+    return /^[a-zA-Z0-9._%+-]+@(yahoo|gmail)\.com$/.test(email);
+}
+function validateLoginPassword(password) {
+    return password.length >= 6;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const emailInput = document.getElementById('loginEmail');
+    const passwordInput = document.getElementById('password');
+    const emailError = document.getElementById('loginEmailError');
+    const passwordError = document.getElementById('loginPasswordError');
+
+    if(emailInput) {
+        emailInput.addEventListener('input', function() {
+            if (this.value.length > 0 && !validateLoginEmail(this.value)) {
+                emailError.textContent = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
+                emailError.style.display = "block";
+            } else {
+                emailError.textContent = "";
+                emailError.style.display = "none";
+            }
+        });
+    }
+
+    if(passwordInput) {
+        passwordInput.addEventListener('input', function() {
+            if (!validateLoginPassword(this.value)) {
+                passwordError.textContent = "Password must be at least 6 characters.";
+                passwordError.style.display = "block";
+            } else {
+                passwordError.textContent = "";
+                passwordError.style.display = "none";
+            }
+        });
+    }
+
+    // Show errors on submit if any field is invalid
+    const loginForm = document.querySelector('form[method="POST"]:not([style*="display: inline"])');
+    if(loginForm) {
+        loginForm.addEventListener('submit', function(e) {
+            let hasError = false;
+            if (!validateLoginEmail(emailInput.value)) {
+                emailError.textContent = "Please provide a valid email address (e.g., @yahoo.com or @gmail.com).";
+                emailError.style.display = "block";
+                hasError = true;
+            }
+            if (!validateLoginPassword(passwordInput.value)) {
+                passwordError.textContent = "Password must be at least 6 characters.";
+                passwordError.style.display = "block";
+                hasError = true;
+            }
+            if (hasError) e.preventDefault();
+        });
+    }
+});
 </script>
 </body>
 </html>
