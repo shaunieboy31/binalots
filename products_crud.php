@@ -23,6 +23,8 @@ $sort_dir = isset($_GET['sort_dir']) && strtolower($_GET['sort_dir']) === 'asc' 
 $allowed_sort = ['product_id', 'name', 'category', 'price'];
 if (!in_array($sort_by, $allowed_sort)) $sort_by = 'product_id';
 
+$error_message = "";
+
 // Handle Import CSV
 if (isset($_POST['import']) && isset($_FILES['excel_file'])) {
     $file = $_FILES['excel_file']['tmp_name'];
@@ -30,12 +32,20 @@ if (isset($_POST['import']) && isset($_FILES['excel_file'])) {
         $header = fgetcsv($handle);
         $special_found = false;
         $rows = [];
+        $duplicate_names = [];
         while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
             $name = $conn->real_escape_string($data[0]);
             $category = strtolower(trim($data[1]));
             $price = floatval($data[2]);
             $desc = $conn->real_escape_string($data[3]);
             if (array_key_exists($category, $allowed_categories)) {
+                // Check for duplicate name
+                $check = $conn->query("SELECT COUNT(*) as cnt FROM products WHERE name='$name'");
+                $exists = $check && $check->fetch_assoc()['cnt'] > 0;
+                if ($exists) {
+                    $duplicate_names[] = $name;
+                    continue;
+                }
                 if ($category === 'special') $special_found = true;
                 $rows[] = [$name, $category, $price, $desc];
             }
@@ -53,10 +63,14 @@ if (isset($_POST['import']) && isset($_FILES['excel_file'])) {
             $conn->query("INSERT INTO products (name, category, price, description) VALUES ('$name', '$category', $price, '$desc')");
         }
 
-        header("Location: home.php");
-        exit;
+        if (!empty($duplicate_names)) {
+            $error_message = "The following product(s) already exist and were not imported: <b>" . implode(", ", $duplicate_names) . "</b>";
+        } else {
+            header("Location: home.php");
+            exit;
+        }
     } else {
-        echo "<div class='alert alert-danger'>Failed to open the file.</div>";
+        $error_message = "Failed to open the file.";
     }
 }
 
@@ -67,11 +81,17 @@ if (isset($_POST['add'])) {
     $price = floatval($_POST['price']);
     $desc = $conn->real_escape_string($_POST['description']);
     if (array_key_exists($category, $allowed_categories)) {
-        $conn->query("INSERT INTO products (name, category, price, description) VALUES ('$name', '$category', $price, '$desc')");
-        header("Location: home.php");
-        exit;
+        // Check for duplicate name
+        $check = $conn->query("SELECT COUNT(*) as cnt FROM products WHERE name='$name'");
+        if ($check && $check->fetch_assoc()['cnt'] > 0) {
+            $error_message = "Product <b>$name</b> already exists!";
+        } else {
+            $conn->query("INSERT INTO products (name, category, price, description) VALUES ('$name', '$category', $price, '$desc')");
+            header("Location: home.php");
+            exit;
+        }
     } else {
-        echo "<div class='alert alert-danger'>Invalid category selected.</div>";
+        $error_message = "Invalid category selected.";
     }
 }
 
@@ -89,9 +109,15 @@ if (isset($_POST['edit'])) {
     $price = floatval($_POST['price']);
     $desc = $conn->real_escape_string($_POST['description']);
     if (array_key_exists($category, $allowed_categories)) {
-        $conn->query("UPDATE products SET name='$name', category='$category', price=$price, description='$desc' WHERE product_id=$id");
+        // Check for duplicate name (excluding current product)
+        $check = $conn->query("SELECT COUNT(*) as cnt FROM products WHERE name='$name' AND product_id!=$id");
+        if ($check && $check->fetch_assoc()['cnt'] > 0) {
+            $error_message = "Product <b>$name</b> already exists!";
+        } else {
+            $conn->query("UPDATE products SET name='$name', category='$category', price=$price, description='$desc' WHERE product_id=$id");
+        }
     } else {
-        echo "<div class='alert alert-danger'>Invalid category selected.</div>";
+        $error_message = "Invalid category selected.";
     }
 }
 
@@ -119,6 +145,9 @@ if (isset($_GET['edit'])) {
 <div class="container mt-5">
     <h2>Product Management</h2>
     <a href="home.php" class="btn btn-secondary mb-3">Back to POS</a>
+    <?php if (!empty($error_message)): ?>
+        <div class="alert alert-danger"><?= $error_message ?></div>
+    <?php endif; ?>
     <!-- Import CSV Form -->
     <form method="POST" enctype="multipart/form-data" class="mb-3">
         <input type="file" name="excel_file" accept=".csv" required>
@@ -127,12 +156,13 @@ if (isset($_GET['edit'])) {
     </form>
     <div class="card mb-4">
         <div class="card-body">
-            <form method="POST" class="row g-3">
+            <form method="POST" class="row g-3" id="productForm">
                 <?php if ($edit_product): ?>
                     <input type="hidden" name="product_id" value="<?= $edit_product['product_id'] ?>">
                 <?php endif; ?>
                 <div class="col-md-3">
                     <input type="text" name="name" class="form-control" placeholder="Product Name" required value="<?= $edit_product['name'] ?? '' ?>">
+                    <div id="name-duplicate-error" class="text-danger mt-1"></div>
                 </div>
                 <div class="col-md-3">
                     <select name="category" class="form-control" required>
@@ -152,9 +182,9 @@ if (isset($_GET['edit'])) {
                 </div>
                 <div class="col-md-1">
                     <?php if ($edit_product): ?>
-                        <button type="submit" name="edit" class="btn btn-warning">Update</button>
+                        <button type="submit" name="edit" class="btn btn-warning" id="submitBtn">Update</button>
                     <?php else: ?>
-                        <button type="submit" name="add" class="btn btn-success">Add</button>
+                        <button type="submit" name="add" class="btn btn-success" id="submitBtn">Add</button>
                     <?php endif; ?>
                 </div>
             </form>
@@ -198,6 +228,42 @@ if (isset($_GET['edit'])) {
       </ul>
     </nav>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var nameInput = document.querySelector('input[name="name"]');
+    var form = document.getElementById('productForm');
+    var errorDiv = document.getElementById('name-duplicate-error');
+    var submitBtn = document.getElementById('submitBtn');
+
+    function checkDuplicateName() {
+        var name = nameInput.value.trim();
+        if (!name) {
+            errorDiv.textContent = "";
+            submitBtn.disabled = false;
+            return;
+        }
+        var idInput = form.querySelector('input[name="product_id"]');
+        var id = idInput ? idInput.value : '';
+        fetch('check_product_name.php?name=' + encodeURIComponent(name) + (id ? '&id=' + id : ''))
+            .then(res => res.text())
+            .then(txt => {
+                if (txt === "exists") {
+                    errorDiv.textContent = "Product \"" + name + "\" already exists!";
+                    submitBtn.disabled = true;
+                } else {
+                    errorDiv.textContent = "";
+                    submitBtn.disabled = false;
+                }
+            });
+    }
+
+    nameInput.addEventListener('blur', checkDuplicateName);
+    nameInput.addEventListener('input', function() {
+        errorDiv.textContent = "";
+        submitBtn.disabled = false;
+    });
+});
+</script>
 </body>
 </html>
 <?php
