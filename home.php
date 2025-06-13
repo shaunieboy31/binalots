@@ -66,6 +66,9 @@ $conn->close();
     .numpad-btn:active {
       background: #ccc;
     }
+    .pagination { margin-top: 10px; }
+    .pagination .page-link { color: #222; }
+    .pagination .active .page-link { background: #4CAF50; color: #fff; border-color: #4CAF50; }
   </style>
 </head>
 <body>
@@ -106,7 +109,7 @@ $conn->close();
     <div class="col-md-3">
       <div class="d-grid gap-2">
         <?php foreach ($categories as $cat): ?>
-          <button class="btn btn-green" onclick="loadCategory('<?= $cat ?>')">
+          <button class="btn btn-green" onclick="loadCategory('<?= $cat ?>', 1)">
             <?= isset($category_display[$cat]) ? $category_display[$cat] : strtoupper($cat) ?>
           </button>
         <?php endforeach; ?>
@@ -120,6 +123,9 @@ $conn->close();
       <div class="panel text-center">
         <h5>Items</h5>
         <div id="bestSellers" class="row"></div>
+        <nav>
+          <ul class="pagination justify-content-center" id="itemPagination"></ul>
+        </nav>
       </div>
     </div>
 
@@ -209,6 +215,11 @@ $conn->close();
   const bestSellers = document.getElementById('bestSellers');
   let order = [];
 
+  // PAGINATION SUPPORT
+  let currentCategory = null;
+  let currentPage = 1;
+  const perPage = 6;
+
   // Dynamically generated categories from PHP
   const categories = {};
   <?php foreach($products as $prod): ?>
@@ -219,13 +230,20 @@ $conn->close();
     });
   <?php endforeach; ?>
 
-  function loadCategory(category) {
+  function loadCategory(category, page = 1) {
+    currentCategory = category;
+    currentPage = page;
     const items = categories[category] || [];
     let html = '';
-    if (items.length === 0) {
+    const totalPages = Math.ceil(items.length / perPage);
+    const start = (page - 1) * perPage;
+    const end = start + perPage;
+    const pagedItems = items.slice(start, end);
+
+    if (pagedItems.length === 0) {
       html = '<div class="col-12 text-center text-muted">No products in this category.</div>';
     } else {
-      items.forEach((item, idx) => {
+      pagedItems.forEach((item, idx) => {
         // Prepare image path (lowercase, no spaces)
         const imgName = item.name.toLowerCase().replace(/\s+/g, '') + '.jpg';
         const imgPath = `assets/${imgName}`;
@@ -240,7 +258,7 @@ $conn->close();
                 position: relative;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.08);
               "
-              onclick="addToOrder('${category}', ${idx})">
+              onclick="addToOrder('${category}', ${start + idx})">
               <img src="${imgPath}" alt="${item.name}" 
                 style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;"
                 onerror="this.style.display='none';"
@@ -255,6 +273,19 @@ $conn->close();
       });
     }
     bestSellers.innerHTML = html;
+
+    // Pagination controls
+    let pagHtml = '';
+    if (totalPages > 1) {
+      for (let i = 1; i <= totalPages; i++) {
+        pagHtml += `<li class="page-item${i === page ? ' active' : ''}">
+          <a class="page-link" href="#" onclick="loadCategory('${category}', ${i});return false;">${i}</a>
+        </li>`;
+      }
+    }
+    // Add pagination below items
+    let pagContainer = document.getElementById('itemPagination');
+    if (pagContainer) pagContainer.innerHTML = pagHtml;
   }
 
   function addToOrder(category, idx) {
@@ -488,7 +519,7 @@ $conn->close();
   window.onload = function() {
     // Load first available category
     const firstCat = Object.keys(categories)[0];
-    if (firstCat) loadCategory(firstCat);
+    if (firstCat) loadCategory(firstCat, 1);
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
