@@ -1,5 +1,5 @@
 <?php
-session_start(); // Start session to access user info
+session_start();
 
 $servername = "localhost";
 $username = "root";
@@ -11,53 +11,90 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Determine filter type
-$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
-$date_condition = "";
+// --- AUTO ARCHIVE ORDERS OLDER THAN 3 DAYS ---
+function autoArchiveOldOrders($conn) {
+    // Select orders older than 3 days
+    $orders = $conn->query("SELECT * FROM orders WHERE created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)");
+    while ($order = $orders->fetch_assoc()) {
+        $order_id = $order['order_id'];
+        // Insert into archived_orders
+        $fields = array_map(function($v){ return "`$v`"; }, array_keys($order));
+        $values = array_map(function($v) use ($conn){ return "'".$conn->real_escape_string($v)."'"; }, array_values($order));
+        $conn->query("INSERT INTO archived_orders (".implode(",",$fields).") VALUES (".implode(",",$values).")");
+        // Insert related order_details
+        $details = $conn->query("SELECT * FROM order_details WHERE order_id = $order_id");
+        while ($detail = $details->fetch_assoc()) {
+            $dfields = array_map(function($v){ return "`$v`"; }, array_keys($detail));
+            $dvalues = array_map(function($v) use ($conn){ return "'".$conn->real_escape_string($v)."'"; }, array_values($detail));
+            $conn->query("INSERT INTO archived_order_details (".implode(",",$dfields).") VALUES (".implode(",",$dvalues).")");
+        }
+        // Delete from order_details and orders
+        $conn->query("DELETE FROM order_details WHERE order_id = $order_id");
+        $conn->query("DELETE FROM orders WHERE order_id = $order_id");
+    }
+}
+autoArchiveOldOrders($conn);
 
-if ($filter === 'today') {
-    $date_condition = "WHERE DATE(o.created_at) = CURDATE()";
-} elseif ($filter === 'week') {
-    $date_condition = "WHERE YEARWEEK(o.created_at, 1) = YEARWEEK(CURDATE(), 1)";
-} elseif ($filter === 'month') {
-    $date_condition = "WHERE YEAR(o.created_at) = YEAR(CURDATE()) AND MONTH(o.created_at) = MONTH(CURDATE())";
+// Date range and receipt search filter
+$filter_sql = [];
+if (!empty($_GET['from']) && !empty($_GET['to'])) {
+    $from = $_GET['from'];
+    $to = $_GET['to'];
+    $filter_sql[] = "DATE(o.created_at) BETWEEN '$from' AND '$to'";
+} elseif (!empty($_GET['from'])) {
+    $from = $_GET['from'];
+    $filter_sql[] = "DATE(o.created_at) >= '$from'";
+} elseif (!empty($_GET['to'])) {
+    $to = $_GET['to'];
+    $filter_sql[] = "DATE(o.created_at) <= '$to'";
+}
+if (!empty($_GET['search_receipt'])) {
+    $search = $conn->real_escape_string($_GET['search_receipt']);
+    $filter_sql[] = "o.receipt_no LIKE '%$search%'";
+}
+$where = '';
+if ($filter_sql) {
+    $where = 'WHERE ' . implode(' AND ', $filter_sql);
 }
 
-// Get filtered orders, now including payment_method
-$sql = "SELECT o.order_id, o.receipt_no, o.operator, o.created_at, o.payment_method, d.item, d.quantity, d.price
+// Get all receipts
+$sql = "SELECT o.receipt_no, o.operator, o.created_at, o.payment_method
         FROM orders o
-        JOIN order_details d ON o.order_id = d.order_id
-        $date_condition
-        ORDER BY o.order_id DESC, d.item ASC";
+        $where
+        GROUP BY o.receipt_no
+        ORDER BY o.order_id DESC";
 $result = $conn->query($sql);
 
-$orders = [];
-$total_revenue = 0;
-$total_items = 0;
-
+$receipts = [];
 if ($result && $result->num_rows > 0) {
     while($row = $result->fetch_assoc()) {
-        $receipt_no = $row['receipt_no'];
-        if (!isset($orders[$receipt_no])) {
-            $orders[$receipt_no] = [
-                'info' => [
-                    'operator' => $row['operator'],
-                    'created_at' => $row['created_at'],
-                    'payment_method' => $row['payment_method']
-                ],
-                'items' => []
-            ];
-        }
-        $orders[$receipt_no]['items'][] = [
-            'item' => $row['item'],
-            'quantity' => $row['quantity'],
-            'price' => $row['price']
-        ];
-
-        // Calculate analytics within the loop
-        $total_revenue += $row['price'];
-        $total_items += $row['quantity'];
+        $receipts[] = $row;
     }
+}
+
+// For dashboard
+$best_sellers = [];
+$bsql = "SELECT d.item, SUM(d.quantity) as total_sold
+         FROM order_details d
+         JOIN orders o ON d.order_id = o.order_id
+         GROUP BY d.item
+         ORDER BY total_sold DESC
+         LIMIT 5";
+$bresult = $conn->query($bsql);
+while($row = $bresult->fetch_assoc()) {
+    $best_sellers[] = $row;
+}
+
+$sales_data = [];
+$ssql = "SELECT DATE(o.created_at) as sale_date, SUM(d.price) as total_sales
+         FROM orders o
+         JOIN order_details d ON o.order_id = d.order_id
+         WHERE o.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+         GROUP BY sale_date
+         ORDER BY sale_date ASC";
+$sresult = $conn->query($ssql);
+while($row = $sresult->fetch_assoc()) {
+    $sales_data[] = $row;
 }
 ?>
 <!DOCTYPE html>
@@ -66,122 +103,116 @@ if ($result && $result->num_rows > 0) {
     <meta charset="UTF-8">
     <title>Order History</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            background-color: #284b25;
-            color: white;
-        }
-        .btn-info {
-            background-color: #4CAF50;
-            border: none;
-        }
-        .btn-info:hover {
-            background-color: #45a049;
-        }
-        .card-header {
-            background-color: #2e6733;
-        }
-        .card {
-            border: none;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .table-dark {
-            background-color: #2e6733;
-        }
-        .table-dark th, .table-dark td {
-            color: white;
-        }
-        .analytics {
-            background-color: #2e6733;
-            padding: 20px;
-            border-radius: 10px;
-        }
+        body { background-color: #284b25; color: white; }
+        .analytics { background-color: #2e6733; padding: 20px; border-radius: 10px; }
+        .list-group-item { background: #2e6733; color: #fff; border: none; }
+        .list-group-item .badge { font-size: 1rem; }
+        .table-dark { background-color: #2e6733; }
+        .table-dark th, .table-dark td { color: white; }
+        .modal-content { color: #222; }
     </style>
 </head>
 <body>
 <div class="container mt-5">
-    <h2 class="mb-4 text-center">Order History</h2>
+    <h2 class="mb-4 text-center">Order Receipts</h2>
     <div class="text-center mb-4">
         <a href="home.php" class="btn btn-secondary">Back to POS</a>
+        <a href="archive.php" class="btn btn-secondary">View Archive</a>
     </div>
-    <div class="text-center mb-4">
-        <button class="btn btn-info" onclick="window.location.href='history.php?filter=today'">Today</button>
-        <button class="btn btn-info" onclick="window.location.href='history.php?filter=week'">This Week</button>
-        <button class="btn btn-info" onclick="window.location.href='history.php?filter=month'">This Month</button>
-        <button class="btn btn-info" onclick="window.location.href='history.php'">All</button>
-        <button class="btn btn-secondary" onclick="window.location.href='archive.php'">View Archive</button>
-    </div>
+    <!-- Sort/Range Filter -->
+    <form class="row g-2 mb-3" id="filterForm" onsubmit="return false;">
+      <div class="col-auto">
+        <label for="from" class="col-form-label">From:</label>
+      </div>
+      <div class="col-auto">
+        <input type="date" class="form-control" id="from" name="from" value="<?= isset($_GET['from']) ? htmlspecialchars($_GET['from']) : '' ?>">
+      </div>
+      <div class="col-auto">
+        <label for="to" class="col-form-label">To:</label>
+      </div>
+      <div class="col-auto">
+        <input type="date" class="form-control" id="to" name="to" value="<?= isset($_GET['to']) ? htmlspecialchars($_GET['to']) : '' ?>">
+      </div>
+    </form>
+    <!-- Dashboard -->
     <div class="analytics mb-4">
-        <h4>Analytics</h4>
-        <p><strong>Total Revenue:</strong> ₱<?= number_format($total_revenue, 2) ?></p>
-        <p><strong>Total Items Sold:</strong> <?= $total_items ?></p>
-    </div>
-    <?php if (!empty($orders)): ?>
-        <?php foreach ($orders as $receipt_no => $order): ?>
-            <div class="card mb-4">
-                <div class="card-header text-white">
-                    <strong>Receipt No:</strong> <?= htmlspecialchars($receipt_no) ?>
-                    <button class="btn btn-danger btn-sm ms-2" onclick="showManagerModal('<?= htmlspecialchars($receipt_no) ?>')" title="Delete Receipt">
-                        Delete
-                    </button>
-                    <span class="float-end">
-                        <strong>Operator:</strong> <?= htmlspecialchars($order['info']['operator'] ?? 'Unknown') ?> |
-                        <strong>Date:</strong> <?= htmlspecialchars($order['info']['created_at']) ?> |
-                        <strong>Method:</strong> <?= htmlspecialchars($order['info']['payment_method']) ?>
-                    </span>
-                </div>
-                <div class="card-body p-0">
-                    <table class="table table-dark table-striped mb-0">
-                        <thead>
-                            <tr>
-                                <th>Item</th>
-                                <th>Quantity</th>
-                                <th>Total Price</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php $order_total = 0; ?>
-                            <?php foreach ($order['items'] as $item): ?>
-                                <tr>
-                                    <td><?= htmlspecialchars($item['item']) ?></td>
-                                    <td><?= htmlspecialchars($item['quantity']) ?></td>
-                                    <td>₱<?= number_format($item['price'], 2) ?></td>
-                                </tr>
-                                <?php $order_total += $item['price']; ?>
-                            <?php endforeach; ?>
-                            <tr>
-                                <td colspan="2" class="text-end"><strong>Order Total:</strong></td>
-                                <td><strong>₱<?= number_format($order_total, 2) ?></strong></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+        <h4>Dashboard</h4>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <canvas id="salesChart" height="120"></canvas>
             </div>
-        <?php endforeach; ?>
-    <?php else: ?>
-        <div class="alert alert-info text-center">No orders found.</div>
-    <?php endif; ?>
+            <div class="col-md-6 mb-3">
+                <h5>Top 5 Best Sellers</h5>
+                <ol class="list-group list-group-numbered">
+                    <?php foreach($best_sellers as $item): ?>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <?= htmlspecialchars($item['item']) ?>
+                            <span class="badge bg-success rounded-pill"><?= $item['total_sold'] ?></span>
+                        </li>
+                    <?php endforeach; ?>
+                </ol>
+            </div>
+        </div>
+    </div>
+    <!-- Search Receipt No (auto search, no reset/search button) -->
+    <form class="row g-2 mb-3" id="searchForm" onsubmit="return false;">
+      <div class="col-auto">
+        <input type="text" class="form-control" name="search_receipt" id="search_receipt" placeholder="Search Receipt No" value="<?= isset($_GET['search_receipt']) ? htmlspecialchars($_GET['search_receipt']) : '' ?>">
+      </div>
+    </form>
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong>Receipts</strong>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-dark table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Receipt No</th>
+                        <th>Operator</th>
+                        <th>Date</th>
+                        <th>Payment Method</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="receipts-table-body">
+                <?php if (!empty($receipts)): ?>
+                    <?php foreach ($receipts as $r): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($r['receipt_no']) ?></td>
+                            <td><?= htmlspecialchars($r['operator']) ?></td>
+                            <td><?= htmlspecialchars($r['created_at']) ?></td>
+                            <td><?= htmlspecialchars($r['payment_method']) ?></td>
+                            <td>
+                                <button class="btn btn-info btn-sm" onclick="viewReceipt('<?= htmlspecialchars($r['receipt_no']) ?>')">View</button>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="5" class="text-center text-warning">
+                            No matching receipts found.
+                        </td>
+                    </tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- Manager Code Modal -->
-<div class="modal fade" id="managerModal" tabindex="-1" aria-labelledby="managerModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content text-dark">
+<!-- Receipt Modal -->
+<div class="modal fade" id="receiptModal" tabindex="-1" aria-labelledby="receiptModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="managerModalLabel">Manager Access</h5>
+        <h5 class="modal-title" id="receiptModalLabel">Receipt Details</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body">
-        <form id="managerCodeForm" onsubmit="return checkManagerCode();">
-          <div class="mb-3">
-            <label for="managerCodeInput" class="form-label">Enter Manager Code</label>
-            <input type="password" class="form-control" id="managerCodeInput" required autofocus>
-            <div id="managerCodeError" class="text-danger mt-2" style="display:none;">Incorrect code. Access denied.</div>
-          </div>
-          <input type="hidden" id="deleteReceiptNo">
-          <button type="submit" class="btn btn-primary w-100">Submit</button>
-        </form>
+      <div class="modal-body" id="receiptModalBody">
+        <!-- Details will be loaded here -->
       </div>
     </div>
   </div>
@@ -189,44 +220,81 @@ if ($result && $result->num_rows > 0) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function showManagerModal(receiptNo) {
-    document.getElementById('managerCodeInput').value = '';
-    document.getElementById('managerCodeError').style.display = 'none';
-    document.getElementById('deleteReceiptNo').value = receiptNo;
-    var modal = new bootstrap.Modal(document.getElementById('managerModal'));
-    modal.show();
-    setTimeout(() => {
-      document.getElementById('managerCodeInput').focus();
-    }, 500);
+function viewReceipt(receiptNo) {
+    fetch('view_receipt.php?receipt_no=' + encodeURIComponent(receiptNo))
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById('receiptModalBody').innerHTML = html;
+            var modal = new bootstrap.Modal(document.getElementById('receiptModal'));
+            modal.show();
+        });
 }
 
-function checkManagerCode() {
-    const code = document.getElementById('managerCodeInput').value;
-    const receiptNo = document.getElementById('deleteReceiptNo').value;
-    if (code === "2222") {
-        document.getElementById('managerCodeError').style.display = 'none';
-        var modal = bootstrap.Modal.getInstance(document.getElementById('managerModal'));
-        modal.hide();
-        // Proceed to delete
-        if(receiptNo) {
-            if(confirm("Are you sure you want to delete this receipt?")) {
-                fetch('delete_receipt.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: 'receipt_no=' + encodeURIComponent(receiptNo)
-                })
-                .then(res => res.text())
-                .then(data => {
-                    alert(data);
-                    location.reload();
-                });
+// AJAX table update
+function updateTable() {
+    const from = document.getElementById('from').value;
+    const to = document.getElementById('to').value;
+    const search = document.getElementById('search_receipt').value;
+    const params = new URLSearchParams({from, to, search_receipt: search});
+    fetch('history_table.php?' + params.toString())
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById('receipts-table-body').innerHTML = html;
+        });
+}
+
+document.getElementById('search_receipt').addEventListener('input', function() {
+    document.getElementById('from').value = '';
+    document.getElementById('to').value = '';
+    updateTable();
+});
+
+document.getElementById('from').addEventListener('change', function() {
+    document.getElementById('search_receipt').value = '';
+    updateTable();
+});
+document.getElementById('to').addEventListener('change', function() {
+    document.getElementById('search_receipt').value = '';
+    updateTable();
+});
+
+// Chart.js Dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    const salesLabels = <?= json_encode(array_column($sales_data, 'sale_date')) ?>;
+    const salesTotals = <?= json_encode(array_map('floatval', array_column($sales_data, 'total_sales'))) ?>;
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: salesLabels,
+            datasets: [{
+                label: 'Total Sales (₱)',
+                data: salesTotals,
+                backgroundColor: '#4CAF50'
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#fff' // Set legend font color to white
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#fff' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: '#fff' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                }
             }
         }
-    } else {
-        document.getElementById('managerCodeError').style.display = 'block';
-    }
-    return false; // Prevent form submit
-}
+    });
+});
 </script>
 </body>
 </html>
