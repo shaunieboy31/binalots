@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 09, 2025 at 10:46 PM
+-- Generation Time: Jun 13, 2025 at 03:21 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -35,6 +35,13 @@ CREATE TABLE `archived_orders` (
   `payment_method` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `archived_orders`
+--
+
+INSERT INTO `archived_orders` (`order_id`, `receipt_no`, `operator`, `created_at`, `payment_method`) VALUES
+(1, '20250613060840', 'Developer', '2025-06-09 12:45:55', 'Cash');
+
 -- --------------------------------------------------------
 
 --
@@ -48,6 +55,14 @@ CREATE TABLE `archived_order_details` (
   `quantity` int(11) DEFAULT NULL,
   `price` decimal(10,2) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `archived_order_details`
+--
+
+INSERT INTO `archived_order_details` (`detail_id`, `order_id`, `item`, `quantity`, `price`) VALUES
+(1, 1, 'Tapsilog', 3, 300.00),
+(2, 1, 'Tosilog', 2, 180.00);
 
 -- --------------------------------------------------------
 
@@ -63,6 +78,19 @@ CREATE TABLE `orders` (
   `payment_method` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `orders`
+--
+
+INSERT INTO `orders` (`order_id`, `receipt_no`, `operator`, `created_at`, `payment_method`) VALUES
+(2, '20250613060914', 'Developer', '2025-06-13 06:09:14', 'Cash'),
+(3, '20250613061420', 'Developer', '2025-06-13 06:14:20', 'Cash'),
+(4, '20250613064244', 'Developer', '2025-06-13 06:42:44', 'Cash'),
+(5, '20250613123834', 'Developer', '2025-06-13 12:38:34', 'Cash'),
+(6, '20250613135654', 'Developer', '2025-06-13 13:56:54', 'Cash'),
+(7, '20250613141616', 'Developer', '2025-06-13 14:16:16', 'Cash'),
+(8, '20250613144810', 'Developer', '2025-06-13 14:48:10', 'Cash');
+
 -- --------------------------------------------------------
 
 --
@@ -76,6 +104,30 @@ CREATE TABLE `order_details` (
   `quantity` int(11) DEFAULT NULL,
   `price` decimal(10,2) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `order_details`
+--
+
+INSERT INTO `order_details` (`detail_id`, `order_id`, `item`, `quantity`, `price`) VALUES
+(3, 2, 'Tosilog', 4, 360.00),
+(4, 3, 'Tapsilog', 2, 200.00),
+(5, 3, 'Longsilog', 2, 160.00),
+(6, 4, 'Tosilog', 26, 2340.00),
+(7, 5, 'Egg', 2, 40.00),
+(8, 6, 'Balot', 5, 75.00),
+(9, 7, 'Itlog na pula', 1, 13.00),
+(10, 7, 'Chicken Hotdog', 1, 12.00),
+(11, 7, 'Pork Chop', 1, 70.00),
+(12, 7, 'Balot', 1, 15.00),
+(13, 7, 'Sinigang na baboy', 1, 50.00),
+(14, 8, 'ikaw', 1, 13.00),
+(15, 8, 'ako', 1, 124.00),
+(16, 8, 'saan', 1, 70.00),
+(17, 8, 'bago', 1, 50.00),
+(18, 8, 'promo', 1, 15.00),
+(19, 8, 'wag', 1, 50.00),
+(20, 8, 'Shaun', 1, 5000.00);
 
 -- --------------------------------------------------------
 
@@ -112,9 +164,8 @@ INSERT INTO `products` (`product_id`, `name`, `category`, `price`, `description`
 (14, 'Soft Drink', 'beverages', 30.00, 'Assorted soft drinks'),
 (15, 'Fruit Juice', 'beverages', 50.00, 'Assorted fruit juices'),
 (16, 'Water', 'beverages', 20.00, 'Bottled water'),
-(17, 'Egg', 'addons', 20.00, 'Extra egg'),
 (18, 'Rice', 'addons', 10.00, 'Extra rice'),
-(19, 'Sauce', 'addons', 10.00, 'Extra sauce');
+(22, 'Shaun', 'beverages', 20.00, '152131');
 
 -- --------------------------------------------------------
 
@@ -137,9 +188,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `otp`, `is_verified`, `created_at`) VALUES
-(2, 'Cristel', 'vergaracristel0@gmail.com', '$2y$10$jk5MqSbkJnLGWsOi8I9Evu.lWUc.wjmZLMNcZihiL8P5ogjV0UUry', NULL, 1, '2025-06-08 05:00:43'),
-(3, 'Developer', 'shaunieboy573@gmail.com', '$2y$10$2GzVoXxWwNOB23AkOY4jrO9eGkM/GFRBi7BbREjbNg2mXWtInx35a', NULL, 1, '2025-06-09 12:37:04'),
-(4, 'sam', 'jjaxxeh@gmail.com', '$2y$10$Htu3k3PZEA3L3UuxRVxm6egySMmP6ArO/mrJjepPlRE2sTwIzF55W', NULL, 1, '2025-06-09 16:09:43');
+(5, 'Developer', 'shaunieboy573@gmail.com', '$2y$10$Gk.nmwu664wvCQNZtHAYLu/aD6U8IeyaDIhQscmKqsaUwC/LWQPuO', NULL, 1, '2025-06-13 04:03:50');
 
 --
 -- Indexes for dumped tables
@@ -192,37 +241,37 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `archived_orders`
 --
 ALTER TABLE `archived_orders`
-  MODIFY `order_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `order_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `archived_order_details`
 --
 ALTER TABLE `archived_order_details`
-  MODIFY `detail_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `detail_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `orders`
 --
 ALTER TABLE `orders`
-  MODIFY `order_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `order_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `order_details`
 --
 ALTER TABLE `order_details`
-  MODIFY `detail_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `detail_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
-  MODIFY `product_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
+  MODIFY `product_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=78;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- Constraints for dumped tables
